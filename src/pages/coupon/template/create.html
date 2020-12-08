@@ -1,0 +1,236 @@
+<div id="coupon-create">
+  <lc-title :text="title"></lc-title>
+
+  <el-form label-width="100px" class="el-row" :model="form" :rules="rules" ref="my-form">
+
+    <el-form-item label="券码名称" prop="activityName">
+      <el-input v-model="form.activityName" :disabled="isViewPage"></el-input>
+    </el-form-item>
+
+    <el-form-item label="制券人" disabled v-if="isViewPage">
+      <el-input v-model="form.createBy" :disabled="isViewPage"></el-input>
+    </el-form-item>
+
+    <el-form-item label="券码说明" prop="activityRemark">
+      <el-input type="textarea" v-model="form.activityRemark" :disabled="isViewPage"></el-input>
+    </el-form-item>
+
+    <el-row>
+      <el-col :span="12">
+        <el-form-item label="有效期" prop="time" required>
+          <el-date-picker clearable v-model="form.time" type="daterange" align="left" placeholder="选择日期范围"
+            :picker-options="pickerOptions" :disabled="isViewPage">
+          </el-date-picker>
+        </el-form-item>
+      </el-col>
+    </el-row>
+
+    <el-form-item label="类别">
+      <el-radio-group v-model="form.type" :disabled="isViewPage">
+        <el-radio :label="0">满减券</el-radio>
+        <el-radio :label="1" :disabled="form.couponScope == 2">满折券</el-radio>
+        <el-radio :label="2" :disabled="true">特价券</el-radio>
+        <el-radio :label="3">代金券</el-radio>
+      </el-radio-group>
+    </el-form-item>
+    <el-form-item label="适用范围">
+      <el-radio-group v-model="form.couponScope" :disabled="isViewPage || form.type == 3">
+        <el-radio :label="1">商品券</el-radio>
+        <el-radio :label="0">店铺券</el-radio>
+        <el-radio :label="2" :disabled="form.type != 0 || form.method==true">运费券</el-radio>
+      </el-radio-group>
+    </el-form-item>
+    <el-form-item label="券码模式">
+      <el-radio-group v-model="form.method" :disabled="isViewPage">
+        <el-radio :label="false" :disabled="form.type == 3">系统生成</el-radio>
+        <el-radio :label="true" :disabled="form.couponScope==2">口令</el-radio>
+      </el-radio-group>
+      <el-input v-model="form.command" v-if="form.method" :disabled="isViewPage"></el-input>
+    </el-form-item>
+    <el-form-item label="次数限制" prop="useTimesLimit">
+
+      <el-input-number v-model="form.useTimesLimit" :min="1" :disabled="true"></el-input-number>
+      <p>
+        每个officeId限制次数,（次数=9999，则不限）
+      </p>
+      </p>
+    </el-form-item>
+
+    <el-form-item label="生成数量" prop="couponTotals">
+      <el-input-number v-model="form.couponTotals" :min="1" :disabled="isViewPage || !form.method || form.type == 3">
+      </el-input-number>
+      <p>
+        注意：券码模式为口令券时需注意设置生成数量，非口令券生成数量根据发放者数量生成
+      </p>
+    </el-form-item>
+    <el-card>
+      <h3>{{form.type==1&&'满折券'||form.type==0&&'满减券'||form.type==2&&'特价券'||form.type==3&&'代金券'}}</h3>
+      <el-form-item label="订单金额需满足（元）" label-width="120px" prop="amountInterval"
+        v-if="form.amountInterval && form.type != 3">
+        <div class="el-form">
+          <el-form-item>
+            <el-input v-model="form.amountInterval.floor" type="number" ref="amount-ref" @blur="amountBlur"
+              @mousewheel.prevent.native="stopMouseWheelChang" :disabled="isViewPage"></el-input>
+            {{form.couponScope==2 ? '如果不限制则填0,限制请填写需满足的订单金额':''}}
+          </el-form-item>
+          <!-- ~
+          <el-form-item>
+            <el-input v-model="form.amountInterval.upper" type="number" @blur="amountBlur" @mousewheel.prevent.native="stopMouseWheelChang"
+              :disabled="isViewPage"></el-input>
+          </el-form-item>
+          （留空则不限） -->
+        </div>
+      </el-form-item>
+      <el-form-item label="折扣率" label-width="120px" v-if="form.type==1" prop="rate" :rules="otherRules.rate" key='1'>
+        <el-input v-model="ruleInfo1[0].discount" type="number" @mousewheel.prevent.native="stopMouseWheelChang"
+          :disabled="isViewPage"></el-input>
+        只支持小于10的正数
+      </el-form-item>
+      <template v-else-if="form.type==0">
+        <el-form-item label="最大抵扣金额" label-width="120px" prop="discount" :rules="otherRules.discount" key='0'>
+          <el-input v-model="ruleInfo0[0].discount" type="number" @mousewheel.prevent.native="stopMouseWheelChang"
+            :disabled="isViewPage"></el-input>
+          {{form.couponScope!==2 ? '只支持正整数':'如果不限制则填0,限制请填写最大抵扣金额(只支持大于0的整数)'}}
+        </el-form-item>
+
+      </template>
+      <div v-else-if="form.type==2" key="2" class="special">
+        <el-form-item label-width="0">
+          <div class="el-form el-row">
+
+            <el-col :lg="6" :sm="12">
+              <el-form-item label-width="70px" label="商品SKU" :class="{'is-error':ruleInfo2AddErr.lcSkuCode}">
+                <el-input v-model="ruleInfo2AddItem.lcSkuCode" size="small" :disabled="isViewPage"
+                  @change="validateLcSkuCode"></el-input>
+                <div class="el-form-item__error">
+                  {{ruleInfo2AddErr.lcSkuCode}}
+                </div>
+              </el-form-item>
+            </el-col>
+            <el-col :lg="6" :sm="12">
+              <el-form-item label-width="70px" label="优惠金额" :class="{'is-error':ruleInfo2AddErr.price}">
+                <el-input v-model="ruleInfo2AddItem.price" type="number" size="small"
+                  @mousewheel.prevent.native="stopMouseWheelChang" min="0" :disabled="isViewPage"
+                  @change="validatePrice"></el-input>
+                <div class="el-form-item__error">
+                  {{ruleInfo2AddErr.price}}
+                </div>
+              </el-form-item>
+            </el-col>
+            <el-col :lg="6" :sm="12">
+              <el-form-item label-width="70px" label="数量" :class="{'is-error':ruleInfo2AddErr.discount}">
+                <el-input v-model="ruleInfo2AddItem.discount" type="number" size="small"
+                  @mousewheel.prevent.native="stopMouseWheelChang" min="0" :disabled="isViewPage"
+                  @change="validateCount"></el-input>
+                <div class="el-form-item__error">
+                  {{ruleInfo2AddErr.discount}}
+                </div>
+              </el-form-item>
+            </el-col>
+            <!-- <el-col :span="24"> -->
+            <el-col :lg="6" :sm="12">
+              <el-form-item>
+                <el-button icon="plus" type="primary" @click='ruleInfo2Add' size="small" :disabled="isViewPage">添加
+                </el-button>
+                <!-- <el-button icon="delete" @click='ruleInfo2Del(index)' size="small" v-if="!isViewPage">删除</el-button> -->
+              </el-form-item>
+            </el-col>
+
+          </div>
+        </el-form-item>
+
+        <lc-table :config="config" :data="computedRuleInfo2" v-if="computedRuleInfo2.length&&form.type==2"
+          @cur-change="curChange2" :page="page2" :key="config.length">
+          <template slot-scope="scope">
+            <template v-if="scope.con.prop =='control'">
+              <el-button icon="edit" @click="ruleInfo2Edit(scope.row)" size="small" :disabled="isViewPage">编辑
+              </el-button>
+              <el-button icon="delete" @click="ruleInfo2Del(scope.row)" size="small" :disabled="isViewPage">删除
+              </el-button>
+            </template>
+            <template v-else>
+              {{scope.row[scope.con.prop]}}
+            </template>
+          </template>
+        </lc-table>
+      </div>
+      <template v-else-if="form.type==3">
+        <el-form-item label="最大抵扣金额" label-width="120px" prop="discount" :rules="otherRules.discount" key='0'>
+          <el-input v-model="ruleInfo3[0].discount" type="number" @mousewheel.prevent.native="stopMouseWheelChang"
+            :disabled="isViewPage"></el-input>
+          {{form.couponScope!==2 ? '只支持正整数':'如果不限制则填0,限制请填写最大抵扣金额(只支持大于0的整数)'}}
+        </el-form-item>
+        <el-form-item label="有效期类型" prop="expirationType">
+          <el-radio-group v-model="form.expirationType" :disabled="isViewPage">
+            <!-- <el-radio :label="1">固定</el-radio> -->
+            <el-radio :label="2">动态</el-radio>
+          </el-radio-group>
+        </el-form-item>
+        <el-form-item label="有效时长" prop="expirationDays" :rules="otherRules.expirationDays">
+          <el-input v-model="form.expirationDays" type="number" @mousewheel.prevent.native="stopMouseWheelChang"
+            :disabled="isViewPage">
+          </el-input>&nbsp;天
+        </el-form-item>
+      </template>
+    </el-card>
+
+    <el-form-item label-width="0" label="" v-if="form.couponScope==1">
+      <sku-selector v-model="form" :disabled="isViewPage"></sku-selector>
+    </el-form-item>
+    <el-form-item label-width="100px" label="使用场景限制">
+      <el-radio-group v-model="couponWay" :disabled="isViewPage || !!form.method">
+        <el-radio :label="0">系统发放</el-radio>
+        <el-radio :label="1" :disabled="form.type == 3">商城领取</el-radio>
+      </el-radio-group>
+    </el-form-item>
+    <template v-if="!isViewPage && !couponWay && form.type != 3">
+      <h3 style="margin:30px auto 10px;">请选择客户</h3>
+      <div style="margin-bottom:10px ;">
+        <!-- <tenant-search :has-submit-btn="true" @broadcast="limitUserAdd"></tenant-search> -->
+        <coupon-user-limit @user-toggle="userToggle" :selected-list="form.limitUser" />
+      </div>
+    </template>
+    <template v-if="limitUser && limitUser.length">
+      <el-table :data="limitUser" border>
+        <el-table-column prop="tenantName" label="集团名称"></el-table-column>
+        <el-table-column prop="customerName" label="客户名称"></el-table-column>
+        <el-table-column prop="saasCode" label="Saas代码"></el-table-column>
+        <el-table-column prop="id" label="officeId"></el-table-column>
+        <el-table-column prop="customerId" label="CustomerId"></el-table-column>
+        <!-- <el-table-column prop="region" label="地区"></el-table-column> -->
+        <el-table-column label="操作" prop="tenantID" v-if="!isViewPage">
+          <template slot-scope="scope">
+            <el-button type="text" @click="limitUserDel(scope.row)">删除</el-button>
+          </template>
+        </el-table-column>
+      </el-table>
+      <el-pagination v-if="isViewPage" :current-page="page.cur" :page-size="page.num"
+        layout="total,prev, pager, next, sizes" :total="page.total" :page-sizes="page.sizes" class="center"
+        @current-change="curChange" @size-change="sizeChange">
+      </el-pagination>
+    </template>
+
+    <el-button style="margin:30px auto;padding 8px 40px;display:block;" type="primary" class="submit" @click="validate"
+      v-if="!isViewPage">
+      <i class="el-icon-loading" v-if="loading"></i> 保存
+    </el-button>
+  </el-form>
+
+  <!-- <div v-if='isViewPage'>
+    <h3 style="margin:30px auto 10px;">核销状态
+      <el-button type='primary' size='small' class="pull-right" @click="exportExcel">导出Excel</el-button>
+    </h3>
+    <el-table :data="writeOffList" border ref='write-off'>
+      <el-table-column prop="couponCode" label="券码"></el-table-column>
+      <el-table-column prop="memberName" label="核销 ID"></el-table-column>
+      <el-table-column prop="writeOffTime" label="核销时间">
+        <template slot-scope='scope'>
+          {{formatTime(scope.row.writeOffTime)}}
+        </template>
+      </el-table-column>
+      <el-table-column prop="orderSN" label="订单"></el-table-column>
+    </el-table>
+    <el-pagination @current-change="curChange" layout="total, prev, pager, next, jumper" :page-size="page.num" :total="page.total"></el-pagination>
+  </div> -->
+
+</div>

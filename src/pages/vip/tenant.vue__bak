@@ -1,0 +1,126 @@
+<template>
+  <div id="vip-tenant">
+    <lc-title text="门诊管理"></lc-title>
+    <lc-condition :condition="condition" @submit="search"></lc-condition>
+    <lc-table :config="config" :data="data" @cur-change="curChange" :page="page">
+      <template slot-scope="scope">
+        <template v-if="scope.con.prop=='saleResponsiblePerson' || scope.con.prop=='custResponsiblePerson' ">
+          <lock-input :item="scope.row[scope.con.prop]" :payload="{item:scope.row,prop:scope.con.prop}" @edit="updateLink" :key="scope.row.officeName" />
+        </template>
+        <template v-else-if="scope.con.prop=='lastTradingtime' ">
+          {{formatDate(scope.row[scope.con.prop])}}
+        </template>
+        <template v-else-if="scope.con.prop=='userType' ">
+          {{formatUserType(scope.row[scope.con.prop])}}
+        </template>
+        <template v-else-if="scope.con.prop=='activity' ">
+          {{activity[scope.row[scope.con.prop]]}}
+        </template>
+        <template v-else>
+          {{scope.row[scope.con.prop]}}
+        </template>
+      </template>
+    </lc-table>
+  </div>
+</template>
+<script lang="ts">
+import Vue from 'vue'
+import { Component, Inject } from 'vue-property-decorator'
+import lcTitle from "../../components/title.vue"
+import lcCondition from "../../components/condition.vue"
+import lcTable from "../../components/table/"
+import lcTableConfig from "../../components/table/control.vue"
+import lockInput from '../../components/lockInput.vue'
+
+import { userTypeObj } from '../order/const/orderSearchCondition'
+import API from '../../API'
+@Component( {
+  name: 'vip-tenant',
+  components: {
+    lcTitle,
+    lcCondition,
+    lcTable,
+    lcTableConfig,
+    lockInput
+  }
+} )
+export default class VipTenant extends Vue {
+  condition = [
+    { value: '', key: 'officeName', label: '门诊名称', type: 'text' },
+    { value: '', key: 'date', label: '最近交易', type: 'daterange' }
+  ]
+  config: any = [
+    { prop: 'officeName', label: '门诊名称' },
+    { prop: 'activity', label: '活跃度' },
+    { prop: 'lastTradingtime', label: '上次交易时间', width: '200px' },
+    { prop: 'userType', label: '用户分类' },
+    { prop: 'city', label: '城市' },
+    { prop: 'saleCity', label: '销售城市' },
+    { prop: 'saleResponsiblePerson', label: '销售城市负责人' },
+    { prop: 'custResponsiblePerson', label: '客服负责人' }
+  ]
+  activity = {
+    '-1': '其他',
+    '0': '活跃',
+    '11': '高风险',
+    '12': '低风险',
+    '2': '停滞',
+    '3': '安装培训',
+    '4': '已关闭'
+  }
+  data: any = []
+  activated () {
+    this.search()
+  }
+  @Inject() formatMyDate
+  formatUserType ( type ) {
+    let user = userTypeObj[ type ]
+    return user && user.name
+  }
+  formatOption () {
+    let o: any = {}
+    this.condition.forEach( v => {
+      o[ v.key ] = v.value
+    } )
+    o.num = this.page.num
+    o.start = ( this.page.cur - 1 ) * o.num
+    if ( o.date && o.date[ 0 ] ) {
+      o.begindate = this.formatMyDate( o.date[ 0 ] )
+      o.enddate = this.formatMyDate( o.date[ 1 ], "yyyy-MM-dd hh:mm:ss", true )
+    }
+    return o
+  }
+  formatDate ( o ) {
+    let time = o && o.time
+    if ( !time ) return ''
+    return this.formatMyDate( time )
+  }
+  search () {
+    this.$http( API.getOfficesInfo, this.formatOption() ).then( ( { data } ) => {
+      let myData = data.data || {}
+      this.data = myData.list || []
+      this.page.total = myData.total
+    } )
+  }
+  updateLink ( txt: string, cb: Function, { item, prop } ) {
+    let { id } = item
+    return this.$http( API.updateOfficesInfo, {
+      id,
+      [ prop ]: txt
+    } ).then( ( { data } ) => {
+      item[ prop ] = txt
+      cb()
+    } )
+  }
+  page = {
+    cur: 1,
+    num: 20,
+    total: 0
+  }
+  curChange ( cur ) {
+    this.page.cur = cur
+    this.search()
+  }
+}
+</script>
+

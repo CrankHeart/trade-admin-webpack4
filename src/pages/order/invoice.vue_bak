@@ -1,0 +1,333 @@
+<template>
+  <div id="invoice">
+    <lc-title text="发票管理"></lc-title>
+    <lc-condition :condition="condition" @submit="search"></lc-condition>
+    <lc-table-config :base-config="baseConfig" @set-config="setInvoiceConf"></lc-table-config>
+    <lc-table selection @data-selection-change="selectionChange" :config="config" :data="data" @cur-change="curChange" :page="page" :key="config.length">
+      <template slot-scope="scope">
+
+        <!-- <template v-if="scope.con.prop =='member'">
+          {{scope.row[scope.con.prop]}}
+        </template> -->
+
+        <template v-if="scope.con.prop =='addressDetail'">
+          <span class="adress" v-html="sperateString(scope.row[scope.con.prop])">
+          </span>
+        </template>
+
+        <template v-else-if="scope.con.prop =='invoiceProgress'">
+          <el-tag :type="',primary,warning,success,danger'.split(',')[scope.row.invoiceProgress]">
+            {{invoiceProgress[scope.row.invoiceProgress].name}}
+          </el-tag>
+        </template>
+        <template v-else-if="scope.con.prop =='invoiceStatus'">
+          {{invoiceStatus[scope.row.invoiceStatus].name}}
+        </template>
+        <template v-else-if="scope.con.prop =='invoiceType'">
+          {{invoiceType[scope.row.invoiceType].name.substr(3)}}
+        </template>
+        <template v-else-if="scope.con.prop =='invoiceKind'">
+          {{invoiceKind[scope.row.invoiceKind].name}}
+        </template>
+
+        <template v-else-if="scope.con.prop =='invoiceApplyTime'">
+          <span class="time">
+            {{formatMyDate(new Date(scope.row.invoiceApplyTime.time))}}
+          </span>
+        </template>
+
+        <template v-else-if="scope.con.prop =='orderSn'">
+          <router-link :to="'/order/search?sn='+scope.row.orderSn" class="el-button el-button--text" tag="button">{{scope.row.orderSn}}</router-link>
+        </template>
+        <template v-else-if="scope.con.prop =='haveReturnOrder'">
+          <!-- {{scope.row.haveReturnOrder?'申请中':'未申请/已完成'}} -->
+          {{formatReturnOrder(scope.row.haveReturnOrder)}}
+        </template>
+        <template v-else-if="scope.con.prop=='control'">
+          <template v-if="scope.row.invoiceProgress == 0">
+            <div class="el-button-group">
+              <el-button size="small" @click="control(scope.row, 1)" type="success" :disabled="!((orderDetail=scope.row.orderDetail||{}) && orderDetail.orderStatus>1&&orderDetail.orderStatus!=6)" v-if="$permissionValidate(535)">
+                通过
+              </el-button>
+              <el-button size="small" @click="control(scope.row, 4)" type="warning" v-if="$permissionValidate(537)">
+                打回
+              </el-button>
+              <el-button size="small" v-if="scope.row.invoiceStatus==0&&$permissionValidate(536)" @click="invoice=scope.row">编辑</el-button>
+            </div>
+          </template>
+          <template v-else-if="scope.row.invoiceProgress == 1 ">
+            <el-button size="small" @click="control(scope.row,3)" type="primary" v-if="$permissionValidate(665)">开票</el-button>
+          </template>
+          <template v-if="scope.row.invoiceProgress==2">
+            <!--还有其他情况联系下 yexiao 添加操作-->
+          </template>
+          <!-- <template v-if="scope.row.invoiceKind==0 && scope.row.invoiceProgress==0 && scope.row.invoiceProgress ==3"> -->
+          <template v-else-if="scope.row.invoiceProgress == 4">
+            <!-- <el-button size="small" @click="reInvoicePop(scope.row)" type="primary">重新开票</el-button> -->
+          </template>
+          <template v-if="scope.row.invoiceKind == 0 && scope.row.invoiceProgress==3 && scope.row.invoiceStatus==0">
+            <el-button size="small" @click="cancelInvoicePop(scope.row)" type="danger" v-if="$permissionValidate(538)">
+              红冲
+            </el-button>
+          </template>
+        </template>
+
+        <template v-else>
+          {{scope.row[scope.con.prop]}}
+        </template>
+      </template>
+    </lc-table>
+
+
+    <el-button type="primary" class="pull-right" @click="exportAll" :disabled="isDisabled" v-if="$permissionValidate(540)">导出全部</el-button>
+    <el-button type="primary" class="pull-right" @click="exportDispersed" :disabled="isDisabled" v-if="$permissionValidate(539)">导出选中</el-button>
+
+    <!-- <invoice-re-issue :item="reInvoiceDetail" v-if="reInvoicePopVisible" @close="reInvoicePopVisible=false"></invoice-re-issue> -->
+    <invoice-update v-model="invioceUpdateVisible" :invoice="invoice" v-if="invioceUpdateVisible&&$permissionValidate(536)"></invoice-update>
+  </div>
+</template>
+<script lang="ts">
+import Vue from 'vue'
+import { Component, Prop, Inject } from 'vue-property-decorator'
+
+import lcTitle from '../../components/title.vue'
+import lcCondition from '../../components/condition.vue'
+import lcTableConfig from '../../components/table/control.vue'
+import lcTable from '../../components/table/index'
+import invoiceUpdate from './components/invoiceUpdate.vue'
+// import invoiceReIssue from './components/invoiceReIssue.vue'
+import { Mutation, Getter } from 'vuex-class'
+import API from '../../API'
+
+import { invoiceKind, invoiceType, invoiceProgress, invoiceStatus, haveReturnOrders } from './const/invoiceConst'
+import { matchArrItem } from '../../utils'
+@Component( {
+  name: 'invoice',
+  components: {
+    lcTitle,
+    lcCondition,
+    lcTableConfig,
+    lcTable,
+    invoiceUpdate
+    // invoiceReIssue
+  }
+} )
+export default class Invoice extends Vue {
+  @Mutation( 'order/setInvoiceConf' ) setInvoiceConf
+  @Getter( 'order/invoiceConfig' ) baseConfig
+
+  isDisabled: boolean = false
+  get config () {
+    return this.baseConfig.filter( v => v.isChecked )
+  }
+  invoice: any = null
+  get invioceUpdateVisible () {
+    return !!this.invoice
+  }
+  set invioceUpdateVisible ( v ) {
+    if ( !v ) {
+      this.invoice = null
+    }
+  }
+  data = []
+  page = {
+    cur: 1,
+    num: 10,
+    total: 0
+  }
+  // reInvoicePopVisible: boolean = false
+  // reInvoiceDetail = null
+  // reInvoicePop(item) {
+  //   this.reInvoicePopVisible = true
+  //   this.reInvoiceDetail = item
+  // }
+  control ( item, type ) {
+    //1:审核通过，3：开票，4：驳回
+    const o = {
+      id: item.id,
+      invoiceProgress: type,
+      broadcast: true
+    }
+    this.$http( API.updateInvoiceProgress, o ).then( ( { data } ) => {
+      item.invoiceProgress = type
+    } )
+  }
+  cancelInvoicePop ( item ) {
+    this.$confirm( '此操作将会发票红冲, 是否继续?', '提示', {
+      confirmButtonText: '确定',
+      cancelButtonText: '取消',
+      type: 'warning'
+    } ).then( () => {
+      this.cancelInvoice( item )
+    } ).catch( () => {
+
+    } )
+  }
+  cancelInvoice ( item ) {
+    this.$http( API.cancelOrderEInvoice, {
+      id: item.id
+    } ).then( () => {
+      item.invoiceStatus = 1
+    } )
+  }
+  curChange ( cur ) {
+    this.page.cur = cur
+    this.search()
+  }
+  sperateString ( v: string ) {
+    let arr = ( v && v.split( ';' ) || [] ).map( ( v, i ) => {
+      return '<p>' + v + '</p>'
+    } )
+    return arr.join( '' )
+  }
+  invoiceProgress = invoiceProgress
+  invoiceKind = invoiceKind
+  invoiceType = invoiceType
+  invoiceStatus = invoiceStatus
+  haveReturnOrders = haveReturnOrders
+  condition = [
+    { value: '', key: 'name', label: '用户名', type: 'text' },
+    { value: {}, key: 'tenant', label: '企业名称', type: 'tenantSearch', options: [] },
+    { value: '', key: 'orderSn', label: '订单编号', type: 'text' },
+    { value: '', key: 'invoiceType', label: '发票类型', type: 'radio', options: invoiceType },
+    { value: '', key: 'invoiceKind', label: '开票方式', type: 'radio', options: invoiceKind },
+    { value: [], key: 'status', label: '进度', type: 'checkbox', options: invoiceProgress },
+    { value: '', key: 'startDate', label: '开始时间', type: 'date' },
+    { value: '', key: 'endDate', label: '结束时间', type: 'date' }
+    // { value: '', key: 'supplier', label: '经销商', type: 'text' }
+  ]
+  params: any = {}
+  @Inject() formatMyDate
+  initCondition () {
+    let query = this.$route.query
+    this.condition.forEach( val => {
+      let key = val.key
+      val.value = query[ key ]
+      if ( key == 'tenant' ) {
+        val.value = {
+          name: query.tenantName,
+          id: query.tenantId
+        }
+      } else if ( key == 'status' ) {
+        val.value = ( query[ key ] && query[ key ].split( ',' ) ) || []
+      } else if ( key == 'invoiceType' || key == 'invoiceKind' ) {
+        if ( val.value ) {
+          val.value = +val.value
+        }
+
+      }
+    } )
+  }
+  activated () {
+    this.initCondition()
+    this.search()
+  }
+  formatData () {
+    let o: any = {}
+    let route: any = {}
+    o.start = ( this.page.cur - 1 ) * this.page.num
+    o.num = this.page.num
+    this.condition.forEach( val => {
+      let key = val.key
+      let value: any = val.value
+
+      route[ key ] = value
+
+      if ( key == 'tenant' ) {
+        route.tenantName = o.tenantName = value && value.name
+        route.tenantId = o.tenantId = value && value.id
+        delete route[ key ]
+      } else if ( key == 'startDate' ) {
+        if ( value ) {
+          route[ key ] = o.startDate = this.formatMyDate( value, 'yyyy-MM-dd hh:mm:ss' )
+        }
+      } else if ( key == 'endDate' ) {
+        if ( value ) {
+          route[ key ] = o.endDate = this.formatMyDate( value, 'yyyy-MM-dd hh:mm:ss', true )
+        }
+      } else if ( key == 'status' ) {
+        value.forEach( v => {
+          o[ v ] = true
+        } )
+        if ( value.length )
+          route[ key ] = value.join( ',' )
+      } else {
+        if ( value !== '' ) {
+          o[ key ] = value
+        } else {
+          delete route[ key ]
+        }
+      }
+    } )
+    this.routeChange( route )
+    // if (o.orderType != -1) {
+    //   if (o.orderType === 1) {
+    //     if (o.settlementStatus === -1) {
+    //       delete o.settlementStatus
+    //     }
+    //   }
+    // }
+
+    this.params = o
+  }
+  routeChange ( query ) {
+    this.$router.push( {
+      path: '/order/invoice',
+      query
+    } )
+  }
+  downloadTips ( time ) {
+    this.$notify( {
+      type: 'success',
+      message: '发票导出中，请稍等！'
+    } )
+    if ( this.isDisabled ) {
+      return
+    }
+    this.isDisabled = true
+    setTimeout( () => {
+      this.isDisabled = false
+    }, time )
+  }
+  selectedItems: any
+  selectionChange ( v ) {
+    this.selectedItems = v
+  }
+  exportDispersed () {
+    if ( !( this.selectedItems && this.selectedItems.length ) ) {
+      this.$notify( {
+        type: 'error',
+        message: '请选择所需导出的订单！'
+      } )
+      return
+    }
+
+    let arr = []
+    this.selectedItems.forEach( ( v, i ) => {
+      arr.push( v.id )
+    } )
+    this.downloadTips( 2000 )
+    this.$submit( API.exportDispersed, {
+      invoiceIdList: arr.join( ';' )
+    } )
+  }
+  exportAll () {
+    this.downloadTips( 2000 )
+    this.$submit( API.export, this.params )
+  }
+  search ( cur?: number ) {
+    this.$permissionValidateWithNotify(534)
+    this.page.cur = cur || this.page.cur
+    this.formatData()
+    this.$http( API.getInvoiceList, this.params ).then( ( { data } ) => {
+      this.data = data.invoiceList
+      this.page.total = data.total
+    } )
+  }
+  formatReturnOrder(id){
+    return matchArrItem( id, haveReturnOrders, 'id' ).name
+  }
+}
+</script>
+
+

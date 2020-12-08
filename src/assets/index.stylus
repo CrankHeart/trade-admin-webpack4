@@ -1,0 +1,168 @@
+@import './var.stylus'
+@import './fonts/iconfont.css'
+body
+ul
+ol
+h1
+h2
+h3
+h4
+h5
+h6
+p
+  margin 0
+  padding 0
+html
+body
+  color #666
+a
+  text-decoration: none
+  color #20a0ff
+li 
+ol
+  list-style none
+.relative  
+  position relative
+.absolute
+  position absolute
+.flex
+  display flex
+v-flex
+  display flex
+  flex-direction column
+.v-middle
+  align-items center
+.middle
+  justify-content center
+.center
+  text-align center
+.left
+  text-align left
+.right
+  text-align right
+.pull-left
+  float  left
+.pull-right
+  float right
+.border-light
+  border 1px solid ligntBorderColor
+.el-button--default
+.el-button--primary
+  .btn-primary
+    padding 7px 30px
+.clearfix
+  &:after
+    content ''
+    display block
+    clear both
+.el-button.pull-right +.el-button.pull-right
+  margin-right 10px
+.icon-chuda
+  font-size 26px
+  margin-left -8px
+.icon-quan
+  font-size: 22px
+  margin-left -6px
+.icon-cuxiao
+  font-size: 18px
+  margin-left -3px
+.el-table th
+.el-table th .cell 
+  background-color: #8492a6!important;
+.el-pagination
+  margin-top 30px
+.el-notification
+  z-index 10002!important
+.el-dialog
+  z-index: 999999
+.iconfont-huodong
+  display inline-block
+  transform scale(1.1)
+img
+  vertical-align: top
+.el-dialog
+  .el-dialog__headerbtn
+    background none
+    border none
+    -webkit-appearance none
+    outline none
+.el-dialog--large
+  width 80%
+.el-tag
+  margin-right 5px
+  margin-bottom 5px
+.box
+    padding 10px 20px
+    border 1px solid #efefef
+    background #fff
+    min-height 300px
+    position relative
+    overflow auto
+.el-radio + .el-radio
+  margin-left 0
+.el-radio
+  margin-right 15px
+
+.el-date-editor--daterange.el-input
+  max-width: 220px
+  width: 100%
+.condition .el-date-editor--daterange.el-input
+  max-width: 1000px!important
+#nprogress .bar
+  z-index: 99999 !important
+  background: #22d4dd !important
+  height 4px !important
+::-webkit-scrollbar {width: 6px;height:12px;}
+::-webkit-scrollbar-track-piece{background-color: #eee;margin: -2px;}
+::-webkit-scrollbar-thumb{background: #aaa;min-height: 150px;min-width: 150px;border-radius: 10px;}
+::-webkit-scrollbar-thumb:vertical:hover{background: #555555}
+::-webkit-scrollbar-thumb:horizontal:hover{background: #555555}
+.el-button-group
+  .el-button 
+    margin-left 3px!important
+    margin-right 3px !important
+    margin-bottom 3px
+    padding-top 5px
+    padding-bottom 5px
+.el-message
+  z-index:  999999!important
+
+.el-message-box__headerbtn
+  visibility hidden
+
+.el-dialog__wrapper,
+.el-message-box__wrapper
+  background-color rgba(0,0,0,.3)
+.el-dialog__header,
+.el-message-box__header
+  padding 10px 20px
+  height 24px
+  text-align left
+  background-color #8492a6
+.el-dialog__title,
+.el-message-box__title
+  color #fff
+.v-modal
+  display none !important
+
+.is-hidden
+  visibility hidden
+.el-switch.is-disabled.is-checked .el-switch__core
+  border-color #20a0ff!important
+  background-color #20a0ff!important
+  opacity .8
+.el-table__body-wrapper
+  z-index 2
+[class*='el-table__fixed']
+  z-index 9
+// #app
+// #index
+// #container
+// #main
+//   height 100%
+.el-table.el-table--hidden
+  visibility visible!important
+
+.marginLeft20 {
+  margin-left: 20px;
+}

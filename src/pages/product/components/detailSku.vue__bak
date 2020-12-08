@@ -1,0 +1,510 @@
+<template>
+  <div class="detail-spu">
+    <h3>SKU</h3>
+    <lc-table-config :base-config="baseConfig" @set-config="setSkuConf"></lc-table-config>
+    <!-- 快速搜索sku -->
+    <el-form @submit.native.prevent inline v-if="mySkuData.length>10" style="marginLeft:30px;">
+      <el-form-item label="sku搜索">
+        <el-select v-model="skuSearch.type" clearable>
+          <el-option v-for="options in skuConfig" :label="options.label" :value="options.prop" :key="options.prop">
+          </el-option>
+        </el-select>
+      </el-form-item>
+      <el-form-item>
+        <el-input v-model="skuSearch.text" placeholder="以后台传递字段为准"></el-input>
+      </el-form-item>
+      <el-form-item>
+        <el-button @click="searchSku" type="primary">查询</el-button>
+        <el-button @click="searchSku(false)">清空</el-button>
+      </el-form-item>
+    </el-form>
+
+    <lc-table :config="skuConfig" :data="skuData" @cur-change="curChange" :page="page" :key="skuConfig.length">
+      <template slot-scope="scope">
+        <template v-if="scope.con.prop=='specification'">
+          <el-input v-model="scope.row[scope.con.prop]" placeholder="空" type="textarea" size="small" :autosize="{ minRows: 1, maxRows: 6 }" :disabled="scope.row.isLocked"></el-input>
+        </template>
+        <template v-else-if="scope.con.prop=='goodLabel'">
+          <lc-select v-model="scope.row.goodLabel" size="small" :options="goodLabels" :key="scope.row.goodLabel" :disabled="scope.row.isLocked"></lc-select>
+        </template>
+        <template v-else-if="scope.con.prop=='whileStocksLast'">
+          <el-tooltip content="是:库存为零时商品下架,否:超出库存还可以继续卖" placement="top">
+
+            <lc-select v-model="scope.row.whileStocksLast" @change="whileStocksLastChange(scope.row,$event)" size="small" :options="whileStocksLasts" :key="scope.row.whileStocksLast" :disabled="scope.row.isLocked"></lc-select>
+          </el-tooltip>
+        </template>
+        <template v-else-if="scope.con.prop=='goodStatus'">
+          <lc-select v-model="scope.row.goodStatus" size="small" :options="goodStatuses" :key="scope.row.goodStatus" :disabled="scope.row.isLocked"></lc-select>
+        </template>
+        <template v-else-if="scope.con.prop=='trialStatus'">
+          <lc-select v-model="scope.row.trialStatus" size="small" @change="trialStatusChange" :options="trialStatuses" :key="scope.row.trialStatuses" :disabled="scope.row.isLocked"></lc-select>
+        </template>
+        <template v-else-if="scope.con.prop=='lcCode'">
+          <span>
+            {{scope.row[scope.con.prop]}}</span>
+        </template>
+        <template v-else-if="scope.con.prop=='bottomPrice'">
+          <span>
+            {{(+scope.row[scope.con.prop]).toFixed(2)}}
+          </span>
+        </template>
+        <template v-else-if="scope.con.prop=='imgControl'">
+          <img-config :item="scope.row" :type="1" :key="scope.row.lcCode"></img-config>
+        </template>
+        <template v-else-if="scope.con.prop=='skuType'">
+          <!-- <sku-virtural-config :item="scope.row" :disabled="scope.row.isLocked" :key="scope.row.lcCode"></sku-virtural-config> -->
+          <sku-virtural-config :item="scope.row" :disabled="true" :changeable="false" :key="scope.row.lcCode"></sku-virtural-config>
+        </template>
+        <template v-else-if="scope.con.prop=='needAptitude'">
+          <aptitude-config :item="scope.row" type="sku" @handler-callback="saveSku(scope.row)" :disabled="scope.row.isLocked" :key="scope.row.lcCode"></aptitude-config>
+        </template>
+        <template v-else-if="scope.con.prop=='validityFlag'">
+          <lc-select v-model="scope.row.validityFlag" size="small" :options="validityFlags" :key="scope.row.validityFlag" :disabled="scope.row.isLocked"></lc-select>
+        </template>
+
+        <template v-else-if="scope.con.prop=='control'">
+          <el-button type="text" @click="scope.row.isLocked=false" v-if="scope.row.isLocked">编辑</el-button>
+          <el-button type="text" @click="saveSku(scope.row)" v-else>保存</el-button>
+        </template>
+        <template v-else-if="scope.con.prop=='activityEndTime'">
+          <el-date-picker v-model="scope.row[scope.con.prop]" :clearable="false" :editable="false" size="small" type="date" placeholder="选择日期" :disabled="scope.row.isLocked">
+          </el-date-picker>
+        </template>
+        <template v-else-if="scope.con.prop=='expirationDate'">
+          <el-date-picker v-model="scope.row[scope.con.prop]" :clearable="false" :editable="false" size="small" type="date" placeholder="选择日期" :disabled="scope.row.isLocked">
+          </el-date-picker>
+        </template>
+        <template v-else-if="scope.con.prop=='stock'">
+          <el-input v-model="scope.row[scope.con.prop]" placeholder="空" size="small" type="number" @mousewheel.native.prevent="stopMouseWheelChang" :disabled="scope.row.isLocked || !!scope.row.whileStocksLast "></el-input>
+        </template>
+        <template v-else-if=" 'saledNumber,settlePrice,salesPrice,activityPrice'.indexOf(scope.con.prop)>-1">
+          <el-input v-model="scope.row[scope.con.prop]" placeholder="空" size="small" type="number" @mousewheel.native.prevent="stopMouseWheelChang" :disabled="scope.row.isLocked"></el-input>
+        </template>
+        <template v-else-if="'level0Price,level1Price,level2Price'.indexOf(scope.con.prop)>-1">
+          {{formatPrice(scope.row.salesPrice,scope.con.prop)}}
+        </template>
+        <template v-else>
+          <el-input v-model="scope.row[scope.con.prop]" placeholder="空" size="small" :disabled="scope.row.isLocked"></el-input>
+        </template>
+      </template>
+    </lc-table>
+    <el-form class="el-row sku-add" v-if="addSkuVisible">
+      <el-col :md="6" :sm="8" :xs="12" v-for="(con,index) in baseConfig" :key="index" v-if="con.prop!='lcCode' && con.prop!='bottomPrice'">
+        <el-form-item :label="con.label" :required="'settlePrice,salesPrice,specification,activityEndTime,activityPrice,unit,goodLabel,expirationDate'.indexOf(con.prop)>-1" label-width="100px">
+          <template v-if="con.prop=='goodStatus'">
+            <lc-select v-model="newSku.goodStatus" :options="goodStatuses" :key="con.prop"></lc-select>
+          </template>
+
+          <template v-else-if="con.prop=='skuType'">
+            <sku-virtural-config :item="newSku"></sku-virtural-config>
+          </template>
+          <template v-else-if="con.prop=='goodLabel'">
+            <lc-select v-model="newSku.goodLabel" :options="goodLabels" :key="con.prop"></lc-select>
+          </template>
+          <template v-else-if="con.prop=='needAptitude'">
+            添加sku后才可修改资质
+          </template>
+          <template v-else-if="con.prop=='imgControl'">
+            <span>添加sku后才可修改图片</span>
+          </template>
+          <template v-else-if="con.prop=='validityFlag'">
+            <lc-select v-model="newSku.validityFlag" :options="validityFlags" :key="con.prop"></lc-select>
+          </template>
+          <template v-else-if="con.prop=='trialStatus'">
+            <lc-select v-model="newSku.trialStatus" :options="trialStatuses" :key="con.prop"></lc-select>
+          </template>
+          <template v-else-if="con.prop=='activityEndTime'">
+            <el-date-picker :editable="false" clearable v-model="newSku.activityEndTime" align="left" placeholder="选择日期" format='yyyy-MM-dd' style="width:100%;"></el-date-picker>
+          </template>
+          <template v-else-if="con.prop=='expirationDate'">
+            <el-date-picker :editable="false" clearable v-model="newSku.expirationDate" align="left" placeholder="选择日期" format='yyyy-MM-dd' style="width:100%;"></el-date-picker>
+          </template>
+          <template v-else-if="'level0Price,level1Price,level2Price'.indexOf(con.prop)>-1">
+            <el-input :value="formatPrice(newSku.salesPrice,con.prop)" size="small" disabled></el-input>
+          </template>
+          <template v-else-if="con.prop=='whileStocksLast'">
+            <el-tooltip content="是:库存为零时商品下架,否:超出库存还可以继续卖" placement="top">
+              <lc-select v-model="newSku.whileStocksLast" :options="whileStocksLasts" :key="con.prop"></lc-select>
+            </el-tooltip>
+          </template>
+          <template v-else>
+            <el-input v-model="newSku[con.prop]" size="small"></el-input>
+          </template>
+        </el-form-item>
+      </el-col>
+    </el-form>
+    <div class="center">
+      <br>
+      <el-button type="primary" icon="plus" @click="addSkuVisible = true" v-if="!addSkuVisible">添加SKU</el-button>
+      <template v-else>
+        <el-button type="primary" @click="saveNewSku">保存</el-button>
+        <el-button @click="addSkuVisible=false">取消</el-button>
+      </template>
+    </div>
+  </div>
+</template>
+
+<script lang="ts">
+import Vue from 'vue'
+import { Component, Prop, Watch, Inject } from 'vue-property-decorator'
+import lcTable from '../../../components/table'
+import lcTableConfig from '../../../components/table/control.vue'
+import { State, Getter, Mutation, Action } from 'vuex-class'
+import lcSelect from '../../../components/common/lcSelect.vue'
+import aptitudeConfig from './aptitudeConfig.vue'
+import API from '../../../API'
+
+import imgConfig from './imgConfig.vue'
+import { goodStatuses, trialStatuses, goodLabels, validityFlags, whileStocksLasts } from '../const/'
+import skuVirturalConfig from './skuVirturalConfig.vue'
+@Component( {
+  name: 'sku-detail',
+  components: {
+    lcTable,
+    lcTableConfig,
+    lcSelect,
+    skuVirturalConfig,
+    aptitudeConfig,
+    imgConfig
+  }
+} )
+export default class SkuDetail extends Vue {
+  @Getter( 'product/skuConfig' ) baseConfig
+  @Mutation( 'product/setSkuConf' ) setSkuConf
+  @Prop() value: any[]
+  @Action( 'message/msgHandled' ) callBack
+
+  get mySkuData () {
+    return this.value
+  }
+  set mySkuData ( v ) {
+    this.$emit( 'input', v )
+  }
+  @Prop() spuData: any
+  get skuConfig () {
+    return this.baseConfig.filter( v => v.isChecked ).concat( { prop: 'control', label: '操作', width: '130', fixed: 'right' } )
+  }
+
+  goodStatuses = goodStatuses
+  trialStatuses = trialStatuses
+  goodLabels = goodLabels
+  validityFlags = validityFlags
+  whileStocksLasts = whileStocksLasts
+  skuSearch = {
+    type: '',
+    text: ''
+  }
+  selectedSku: any = []
+  get skuData () {
+    let selectedSku = this.selectedSku
+    if ( selectedSku.length ) {
+      return this.curPageSku( selectedSku )
+    }
+    return this.curPageSku( this.mySkuData )
+  }
+  addSkuVisible: boolean = false
+  @Watch( 'addSkuVisible' )
+  addSkuVisibleWatcher ( v ) {
+    if ( v ) {
+      let array = [ 'goodLabel', 'skuType', 'validityFlag', 'trialStatus', 'goodStatus', 'whileStocksLast' ]
+      this.baseConfig.forEach( val => {
+        let key = val.prop
+        if ( array.indexOf( key ) > -1 ) {
+          this.$set( this.newSku, key, 0 )
+        } else if ( key !== 'lcCode' ) {
+          this.$set( this.newSku, key, '' )
+        }
+      } )
+      this.$set( this.newSku, 'contrastingRelations', [] )
+    }
+  }
+  whileStocksLastChange ( item, value ) {
+    if ( value && !+item.stock && item.skuType == 1 ) {
+      this.$notify( {
+        type: 'error',
+        message: '不能将库存为0的虚拟商品设置为【售完即止】'
+      } )
+      value = 0
+    }
+    item.whileStocksLast = value
+  }
+  saveSku ( item ) {
+    // console.log( item )
+    if ( !this.validateSku( item ) ) return
+    if ( item.goodLabel === 1 ) {
+      this.$set( this.spuData, 'label', '常备商品' )
+    } else {
+      this.$set( this.spuData, 'label', '订购商品' )
+    }
+    let activityEndTime = item.activityEndTime
+    if ( typeof activityEndTime == 'string' ) {
+      activityEndTime = activityEndTime.replace( /!^\s/i, 'T' )
+    }
+    let expirationDate = item.expirationDate
+    if ( typeof expirationDate == 'string' ) {
+      expirationDate = expirationDate.replace( /!^\s/i, 'T' )
+    }
+    if ( +item.batchNumber < 1 ) {
+      item.batchNumber = 1
+      this.$notify( {
+        type: 'warning',
+        message: '起批数量至少为1'
+      } )
+    }
+    this.$http( API.updateSkuStoreAttributes, {
+      spu: this.spuData,
+      sku: [ {
+        ...item,
+        activityEndTime: this.formatMyDate( activityEndTime, void 0, true ),
+        expirationDate: this.formatMyDate( expirationDate, void 0, true ),
+        contrastingRelations: JSON.stringify( item.contrastingRelations )
+      } ],
+      broadcast: true
+    } ).then( ( { data } ) => {
+      let { type } = this.$route.query
+      if ( type !== undefined ) {
+        this.callBack( { id: item.id, type } )
+      }
+      item.isLocked = true
+      this.$emit( 'check-sku' )
+    } )
+  }
+  newSku: any = {}
+  validateSku ( sku ) {
+    Object.keys( sku ).forEach( key => {
+      let val = sku[ key ]
+      if ( typeof val === 'string' ) {
+        sku[ key ] = val.trim()
+      }
+    } )
+    // , bottomPrice
+    let { settlePrice, salesPrice, specification, stock, activityEndTime, trialStatus, activityPrice, id, skuType, contrastingRelations, unit, goodLabel, validityFlag, expirationDate, whileStocksLast } = sku
+    specification = specification.replace( /\s/g, '' )
+    // if ( skuType && !contrastingRelations.length ) {
+    //   this.$notify( {
+    //     type: 'error',
+    //     message: '虚拟物品需添加商品配置！'
+    //   } )
+    //   return false
+    // }
+    if ( specification == '' ) {
+      this.$notify( {
+        type: 'error',
+        message: 'SKU规格不能为空！'
+      } )
+      return false
+    }
+    if ( goodLabel === '' ) {
+      this.$notify( {
+        type: 'error',
+        message: '商品标签不能为空！'
+      } )
+      return false
+    }
+    if ( validityFlag === '' ) {
+      this.$notify( {
+        type: 'error',
+        message: '商品效期不能为空！'
+      } )
+      return false
+    }
+    if ( unit == '' ) {
+      this.$notify( {
+        type: 'error',
+        message: 'SKU单位不能为空！'
+      } )
+      return false
+    }
+    if ( validityFlag === 2 && !expirationDate ) {
+      this.$notify( {
+        type: "error",
+        message: "请选择商品失效日期！"
+      } )
+      return false
+    }
+    if ( trialStatus === 2 && !+activityPrice ) {
+      this.$notify( {
+        type: 'error',
+        message: '商品参加促销，价格必须为有效数字！'
+      } )
+      return false
+    }
+
+    if ( trialStatus === 2 && !activityEndTime ) {
+      this.$notify( {
+        type: "error",
+        message: "商品参加促销，需设置活动结束时间！"
+      } )
+      return false
+    }
+
+    if ( stock !== '' && !/^\d+$/.test( stock ) ) {
+      this.$notify( {
+        type: 'error',
+        message: 'SKU商品库存填写有误，请完善后提交！'
+      } )
+      return false
+    }
+    if ( ( goodLabel === 1 || whileStocksLast === 1 ) && !+stock ) {
+      this.$notify( {
+        type: "error",
+        message: goodLabel === 1 ? "常备商品库存不能为0！" : "当选择售完即止时不能修改库存,请您确定库存数量"
+      } )
+      return false
+    }
+    settlePrice += ''
+    salesPrice += ''
+    // bottomPrice += ''
+    if (
+      !settlePrice ||
+      +settlePrice < 0 ||
+      +settlePrice != settlePrice ||
+      !salesPrice ||
+      +salesPrice < 0 ||
+      +salesPrice != salesPrice
+      // ||
+      // !bottomPrice ||
+      // +bottomPrice < 0 ||
+      // +bottomPrice != bottomPrice
+    ) {
+      this.$notify( {
+        type: 'error',
+        message: 'SKU价格必须填写有效数字！'
+      } )
+      return false
+    }
+
+    let l = this.mySkuData.length
+    for ( let i = 0; i < l; i++ ) {
+      let item = this.mySkuData[ i ]
+      let specificationO = item.specification.replace( /\s/g, '' )
+      let idO = item.id
+      if ( specificationO == specification && id !== idO ) {
+        this.$notify( {
+          type: 'error',
+          message: '规格名称重复！'
+        } )
+        return false
+      }
+    }
+    return true
+  }
+  @Inject() formatMyDate
+  saveNewSku () {
+    if ( !this.validateSku( this.newSku ) ) return
+    let newSku = this.newSku
+    newSku.trialStatus = newSku.trialStatus || 0
+    newSku.skuType = newSku.skuType || 0
+    newSku.batchNumber = +newSku.batchNumber || 1
+    newSku.whileStocksLast = newSku.whileStocksLast || 0
+    let activityEndTime = newSku.activityEndTime ? new Date( newSku.activityEndTime ) : new Date()
+    let expirationDate = newSku.expirationDate ? new Date( newSku.expirationDate ) : new Date()
+    let { name, lcCode } = this.spuData
+    this.$http( API.addSkuInfo, {
+      ...newSku,
+      activityEndTime: this.formatMyDate( activityEndTime, void 0, true ),
+      expirationDate: this.formatMyDate( expirationDate, void 0, true ),
+      contrastingRelations: JSON.stringify( newSku.contrastingRelations ),
+      name,
+      lcSpuCode: lcCode,
+      productId: this.$route.params.id
+    } ).then( ( { data } ) => {
+      let o: any = Object.assign( {
+        isLocked: true
+      },
+        data.data,
+        {
+          contrastingRelations: this.newSku.contrastingRelations,
+          needAptitude: 0
+        } )
+
+      this.mySkuData = this.mySkuData.concat( o )
+      this.saveSku( data.data )
+      this.addSkuVisible = false
+    } )
+  }
+  trialStatusChange ( v ) {
+    if ( v === 2 ) {
+      this.$notify( {
+        type: 'warning',
+        message: 'sku切换为爆款，请注意设置【结束时间】与【活动价】'
+      } )
+    }
+  }
+  searchSku ( bo ) {
+    this.curChange( 1 )
+    let skuSearch = this.skuSearch
+    this.selectedSku = []
+    if ( !bo ) {
+      skuSearch.type = null
+      skuSearch.text = null
+      return
+    }
+    let type = skuSearch.type
+    let text = skuSearch.text
+    if ( type && text ) {
+      this.mySkuData.forEach( val => {
+        if ( val[ type ] == text ) {
+          this.selectedSku.push( val )
+        }
+      } )
+    }
+  }
+  page = {
+    cur: 1,
+    num: 5,
+    total: 0
+  }
+  stopMouseWheelChang () {
+    return false
+  }
+  @Watch( 'mySkuData' )
+  dataWatcher ( v, o ) {
+    if ( v.length !== o.length ) {
+      this.page.cur = 1
+      this.page.total = v.length
+    }
+  }
+  formatPrice ( price = 0, type ) {
+    let rate = this.spuData[ type ] || 1
+    let result = price * rate
+    let scale = result >= 50 ? 1 : 10
+    return ( Math.round( result * scale ) / scale ).toFixed( 2 )
+  }
+  curPageSku ( data ) {
+    let num = this.page.num
+    let start = ( this.page.cur - 1 ) * num
+    data.forEach( val => {
+      val.deliveryTime = val.deliveryTime || 7
+    } )
+    this.page.total = data.length
+    return data.slice( start, start + num )
+  }
+  curChange ( cur ) {
+    this.page.cur = cur
+  }
+}
+</script>
+<style lang="stylus" scoped>
+.el-textarea {
+  margin-top: 5px;
+  margin-bottom: 5px;
+}
+.el-date-editor{
+  width: 130px;
+}
+.el-input {
+  min-width: 100px;
+}
+
+.sku-add {
+  .el-select {
+    width: 100%;
+  }
+
+  .el-col {
+    max-height: 58px;
+    overflow: hidden;
+  }
+}
+</style>

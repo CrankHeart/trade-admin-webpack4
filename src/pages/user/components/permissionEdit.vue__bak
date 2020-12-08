@@ -1,0 +1,192 @@
+<template>
+  <div class="user-permission-edit" :gutter="30">
+    <el-form label-width="80px" :model="model" :rules="rules" ref="my-form">
+      <el-form-item label="权限名称" prop="permissionName">
+        <el-input v-model="model.permissionName" placeholder="请输入权限名称" />
+      </el-form-item>
+      <el-form-item label="权限值" prop="permissionValue">
+        <el-input v-model="model.permissionValue" :disabled="!!editItem" placeholder="『权限值：权限唯一识别，保存后不可修改』" />
+      </el-form-item>
+      <el-form-item label="权限级别" prop="permisgradeionName">
+        <el-select v-model="model.grade" placeholder="请选择" :disabled="!!editItem">
+          <el-option v-for="(item,index) in grades" :key="index" :label="item.name" :value="item.id" @click.native="gradeChange(item.id)">
+          </el-option>
+        </el-select>
+      </el-form-item>
+      <el-form-item v-if="model.grade !=1" label="父级权限" prop="parent">
+        <el-select v-model="model.parent" :disabled="!!editItem" placeholder="请选择">
+          <el-option v-for="item in filterGrade" :key="item.id" :label="item.permissionName" :value="item.id">
+          </el-option>
+        </el-select>
+      </el-form-item>
+      <el-form-item label="备注" prop="remark">
+        <el-input v-model="model.remark" type="textarea" :maxlength="100" placeholder="最多输入100个字符" />
+      </el-form-item>
+      <el-form-item label="">
+        <el-button @click="cancelForm">取消</el-button>
+        <el-button type="primary" @click="submitForm">确定</el-button>
+      </el-form-item>
+    </el-form>
+  </div>
+</template>
+<script lang="ts">
+import Vue from 'vue'
+import { Component, Inject, Prop, Watch } from 'vue-property-decorator'
+import API from '../../../API'
+import { State, Getter, Action } from 'vuex-class'
+@Component( {
+  name: 'permission-edit'
+} )
+export default class PermissionEdit extends Vue {
+  @Getter( 'permission/getterPermissionAll' ) formatedPermission
+  @State( state => state.permission.permissionAll ) allPermission
+  @Action( 'permission/getPermissionAll' ) getPermissionAll
+  created () {
+    this.getPermissionAll()
+    this.initModel()
+  }
+  @Prop( { default: null } )
+  editItem: any
+  @Watch( 'editItem' )
+  editItemWatcher () {
+    this.initModel()
+    this.$scrollTo( this.$el, 500, { offset: -110 } )
+  }
+  initModel () {
+    let model = {
+      permissionName: '',
+      permissionValue: '',
+      grade: 1,
+      remark: '',
+      parent: 0
+    }
+    this.model = Object.assign( {}, model, this.editItem || {} )
+  }
+  // editItem 拷贝体
+  model: any = null
+  rules: any = {
+    permissionName: [
+      { validator: this.validateName, trigger: 'blur,submit' }
+    ],
+    permissionValue: [
+      { validator: this.validateValue, trigger: 'blur,submit' }
+    ],
+    // grade: [
+    //   { validator: this.validateGrade, trigger: 'blur,submit' }
+    // ],
+    // remark: [
+    //   { validator: this.validateRemark, trigger: 'blur,submit' }
+    // ],
+    parent: [
+      { validator: this.validateParent, trigger: 'blur,submit' }
+    ]
+  }
+  validateName ( rule, value, cb ) {
+    value = value && value.trim()
+    if ( value == '' ) {
+      cb( new Error( '权限名不能为空!' ) )
+    }
+
+    let formatedPermission = this.formatedPermission
+    let i = 0
+    let l = formatedPermission.length
+    for ( ; i < l; i++ ) {
+      let pms = formatedPermission[ i ]
+      if ( !this.editItem && pms.grade === this.model.grade ) {
+        if ( pms.id != this.model.id ) {
+          if ( pms.permissionName === this.model.permissionName ) {
+            cb( new Error( '权限名已存在!' ) )
+            break
+          }
+        }
+      }
+    }
+  }
+  validateValue ( rule, value, cb ) {
+    value = value && value.trim()
+    if ( value == '' ) {
+      cb( new Error( '权限值不能为空!' ) )
+    }
+  }
+  // validateGrade (rule, value, cb) {
+  //   value = value && value.trim()
+  //   if (value == '') {
+  //     cb(new Error('权限名权限值不能为空能为空!'))
+  //   }
+  // }
+  validateParent ( rule, value, cb ) {
+    if ( this.editItem && this.model.grade != 1 ) {
+      if ( !value ) {
+        cb( new Error( '请选择父级权限!' ) )
+      }
+    }
+  }
+  grades = [
+    { name: '1级权限', id: 1 },
+    { name: '2级权限', id: 2 },
+    { name: '3级权限', id: 3 }
+  ]
+  gradeChange () {
+    this.model.parent = ''
+  }
+  cancelForm () {
+    this.$emit( 'edit-permission' )
+  }
+  submitForm () {
+    let myForm: any = this.$refs[ 'my-form' ]
+    let isPassed = true
+    myForm.fields.forEach( ( field, index ) => {
+      field.validate( '', errors => {
+        if ( errors ) {
+          isPassed = false;
+        }
+      } );
+    } )
+    if ( isPassed ) {
+      this.submit()
+    }
+  }
+  submit () {
+    this.$http( !this.editItem ? API.permissionAdd : API.permissionUpdate2, {
+      ...this.model, broadcast: true
+    } ).then( ( { data } ) => {
+      // this.$emit('handler-submited', this.model)
+      let params
+      if ( !this.editItem ) {
+        params = {
+          data: data.data,
+          type: 'add'
+        }
+      } else {
+        params = {
+          data: this.model,
+          type: 'update'
+        };
+      }
+      this.initModel()
+      this.getPermissionAll( true ).then( () => this.cancelForm() )
+    } )
+  }
+  get filterGrade () {
+    let grade = this.model.grade
+    if ( grade === 1 ) return []
+    var arr = this.allPermission.filter( v => v.grade == grade - 1 )
+    return arr
+  }
+}
+</script>
+<style lang="stylus" scoped>
+.el-input
+.el-textarea
+.el-select
+  width 100%
+  max-width 350px
+.el-form-item
+  margin-bottom 22px
+</style>
+<style lang="stylus">
+.el-icon-loading
+  display none
+</style>
+
+

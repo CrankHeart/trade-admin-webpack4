@@ -1,0 +1,247 @@
+<template>
+  <el-dialog v-model="visible" class="floor-list-config" :before-close="dialogClose" title="选择列表配置">
+
+    <template v-if="hasTabs">
+      <el-row type="flex">
+        <span style="font-weight:bold;line-height:40px">添加tabs</span>
+        <el-tabs :editable="!disabled" @edit="editTabItem" v-model="curTabIndex" @tab-click="tabClick">
+          <el-tab-pane v-for="(item,index) in tabs" :name="`${index}`" :key="index">
+            <el-input v-model="item.tabName" slot="label" :disabled="disabled" />
+          </el-tab-pane>
+        </el-tabs>
+      </el-row>
+    </template>
+
+    <el-form inline>
+      <el-form-item label="列表类型">
+        <el-select v-model="floorType">
+          <el-option v-for="option in options.floorTypes" :value="option.id" :key="option.id" :label="option.name" :disabled="disabled"></el-option>
+        </el-select>
+      </el-form-item>
+      <el-form-item label="列表模板">
+        <el-select v-model="templateType" :disabled="disabled">
+          <el-option v-for="option in options.templateTypes" :value="option.id" :key="option.id" :label="option.name"></el-option>
+        </el-select>
+      </el-form-item>
+    </el-form>
+
+    <sku-selector v-model="curList" :total-sku="totalSku" v-if="floorType=='product'" :disabled="disabled" :check-trial="false"></sku-selector>
+    <event-selector v-model="curList" v-if="floorType=='activity'" :config="productConfig" :theme-event-id="themeEventId" :disabled="disabled" :key="curTabIndex"></event-selector>
+
+    <div slot="footer">
+      <el-button @click="dialogClose">取消</el-button>
+      <el-button type="primary" @click="save">确定</el-button>
+    </div>
+
+  </el-dialog>
+</template>
+<script lang="ts">
+import Vue from 'vue'
+import { Component, Prop, Watch } from 'vue-property-decorator'
+
+import skuSelector from '../../../components/skuSelector.vue'
+import eventSelector from './eventSelector.vue'
+import { floorTypes, themeEventModes, templateTypes } from '../const'
+
+@Component( {
+  name: 'floor-container-config',
+  components: {
+    skuSelector,
+    eventSelector
+  }
+} )
+export default class FloorContainerConfig extends Vue {
+  options = {
+    floorTypes,
+    templateTypes
+  }
+  myData: any = {}
+  get hasTabs () {
+    return !!this.tabs
+  }
+  @Prop()
+  disabled: boolean
+  @Prop()
+  value: boolean
+  @Prop()
+  container: any
+  get visible () {
+    return this.value
+  }
+  @Watch( 'visible' )
+  visibleWatcher ( v ) {
+    if ( v ) {
+      this.initData()
+    }
+  }
+  get productConfig () {
+    return this.myData.productConfig || []
+  }
+  get themeEventId () {
+    return this.container.themeEventId
+  }
+  set visible ( v ) {
+    this.$emit( 'input', v )
+  }
+  get totalSku () {
+    if ( this.tabs.length == 1 ) {
+      return this.tabs[ 0 ].data
+    } else if ( this.tabs.length > 1 ) {
+      return this.tabs.reduce( ( total, next ) => total.concat( next.data || [] ), [] )
+    } else {
+      return this.myData.data
+    }
+  }
+  tabs: any[] = []
+  curTabIndex: any = 0
+  tabClick ( { index } ) {
+    this.curTabIndex = index
+  }
+  get curTab () {
+    return this.tabs[ this.curTabIndex ] || {}
+  }
+
+  get templateType () {
+    return ( this.tabs.length && this.curTab.templateType ) || this.myData.templateType
+  }
+  set templateType ( v ) {
+    if ( this.tabs.length ) {
+      this.curTab.templateType = v
+    } else {
+      this.myData.templateType = v
+    }
+  }
+
+  get floorType () {
+    return ( this.tabs.length && this.curTab.floorType ) || this.myData.floorType
+  }
+  set floorType ( v ) {
+    if ( this.tabs.length ) {
+      this.$set( this.curTab, 'floorType', v )
+    } else {
+      this.$set( this.myData, 'floorType', v )
+    }
+  }
+
+  // floorTypeChange ( v ) {
+  //   this.floorType = v
+  // }
+
+
+  initData () {
+    let initData = {
+      data: [],
+      templateType: '',
+      floorType: ''
+    }
+    this.myData = JSON.parse( JSON.stringify( Object.assign( initData, this.container ) ) )
+    let { tabs } = this.myData
+    if ( tabs ) {
+      this.tabs = tabs
+    } else {
+      let { floorProducts, floorContainers } = this.myData
+
+      if ( floorContainers.length ) {
+        this.myData.data = floorContainers
+        this.myData.floorType = 'activity'
+      } else if ( floorProducts.length ) {
+        this.myData.data = floorProducts
+        this.myData.floorType = 'product'
+      } else {
+        this.myData.data = []
+      }
+    }
+
+  }
+  get curList () {
+    if ( !this.tabs.length ) {
+      return this.myData.data
+    } else {
+      try {
+        return this.tabs[ this.curTabIndex ].data || []
+      } catch ( e ) {
+        return []
+      }
+    }
+  }
+  set curList ( v ) {
+    if ( !this.tabs.length ) {
+      this.myData.data = v
+    } else {
+      try {
+        this.tabs[ this.curTabIndex ].data = v
+      } catch ( e ) {
+        console.log( e, 'curList setting' )
+      }
+    }
+  }
+  dialogClose ( done ) {
+    this.$confirm( '确认关闭？' )
+      .then( _ => {
+        this.$emit( 'input', false )
+      } )
+      .catch( _ => { } )
+  }
+  editTabItem ( targetName, action ) {
+    if ( action == 'add' ) {
+      this.addTabItem( !this.tabs.length ? this.myData.data.concat() : [] )
+    } else if ( action == 'remove' ) {
+      this.$confirm( '确认删除tab并同时删除当前tab下选中商品或者活动？' ).then( _ => {
+        this.delTabItem( targetName )
+      } ).catch( _ => { } )
+    }
+  }
+  delTabItem ( index ) {
+    if ( this.tabs.length === 1 ) {
+      try {
+        this.myData.data = this.tabs[ 0 ].data
+      } catch ( e ) {
+        this.myData.data = []
+      }
+    }
+    this.tabs.splice( index, 1 )
+  }
+  addTabItem ( arr = [] ) {
+    let item: any = this.tabs.slice( -1 )[ 0 ] || {}
+    let i = +( ( item.tabName || '' ).match( /\d/ ) )
+    this.tabs.push( {
+      tabName: `tab_${i + 1}`,
+      data: arr,
+      templateType: '',
+      floorType: ''
+    } )
+  }
+  save () {
+    let o: any = Object.assign( {}, { data: [] } )
+    if ( this.tabs.length && this.tabs.length < 2 ) {
+      this.myData = this.tabs[ 0 ] || {}
+    }
+    if ( this.tabs.length >= 2 ) {
+      let start = {}
+      o.tabs = this.tabs.map( ( { tabName, data, templateType, floorType } ) => {
+        let len = data.length
+        let type = floorType == 'activity' ? 'floorContainers' : 'floorProducts'
+        start[ type ] = start[ type ] || 0
+        o[ type ] = o[ type ] || []
+        o[ type ].push( ...data )
+        return {
+          tabName,
+          templateType,
+          floorType,
+          start: start[ type ],
+          end: start[ type ] += len
+        }
+      } )
+    } else {
+      let type = this.myData.floorType == 'activity' ? 'floorContainers' : 'floorProducts'
+      o = { ...this.myData, [ type ]: this.myData.data }
+    }
+
+    delete o.data
+    this.$emit( 'change', o )
+
+    this.$emit( 'input', false )
+  }
+
+}
+</script>

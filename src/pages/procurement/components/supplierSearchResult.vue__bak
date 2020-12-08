@@ -1,0 +1,43 @@
+<template>
+  <div class="procurement-create-sku-result">
+    <!-- <lc-table-config :base-config="baseConfig" @set-config="setSupplierConf"></lc-table-config> -->
+    <lc-table :config="config" :data="data" @cur-change="curChange" :page="page" :key="config.length"></lc-table>
+  </div>
+</template>
+<script lang="ts">
+import Vue from 'vue'
+import { Component, Prop, Watch } from 'vue-property-decorator'
+import { State, Action, Getter, Mutation } from 'vuex-class'
+import lcTableConfig from '../../../components/table/control.vue'
+import lcTable from '../../../components/table/'
+@Component({
+  name: 'supplier-sku-serach-result',
+  components: {
+    lcTableConfig,
+    lcTable
+  }
+})
+export default class procurementCreateSkuResult extends Vue {
+  @Mutation('supplier/setSupplierConf') setSupplierConf
+  @Getter('supplier/supplierConf') baseConfig
+  config = [
+    { prop: 'check', label: '选择', width: '70px' },
+    { prop: 'lcSkuCode', label: '品牌', width: '200px' },
+    { prop: 'name', label: 'spu名称', width: '200px' },
+    { prop: 'lcCode', label: 'lc编码', width: '200px' },
+    { prop: 'lcSkucode', label: 'sku编码', width: '200px' },
+    { prop: 'specification', label: '规格', width: '110px' },
+    { prop: 'code', label: '自有编码', width: '100px' },
+    { prop: 'unit', label: '单位', width: '100px' },
+    { prop: 'price', label: '价格', width: '100px' },
+    { prop: 'control', label: '操作', width: '65px', fixed: 'right' }
+  ]
+} 
+</script>
+<style lang="stylus" scoped>
+
+</style>
+
+
+
+

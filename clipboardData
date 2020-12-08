@@ -1,0 +1,41 @@
+e.prototype._sendPaste = function () {
+    function e (e) {
+        var t = e.getAsFile ? e.getAsFile() : e,
+            i = new FileReader,
+            n = $("#text_in").html();
+        i.onload = function (e) {
+            $("#text_in").html(n);
+            var t = new Image;
+            t.src = e.target.result;
+            var i = {
+                title: "是否发送图片",
+                context: '<div class="sendImgBox"><p><img src="' + e.target.result + '" class="sendImg"></p><div class="foot-btn" ><a class="btn-cancel" id="sendImg_cancel" href="javascript:">取消</a><a class="btn-ok" id="sendImg_send" href="javascript:">发送</a></div></div>'
+            };
+            c.shadeLayer.init("orther_new", "540", i),
+                $("#sendImg_cancel").click(function () {
+                    c.shadeLayer.closed()
+                }),
+                $("#sendImg_send").click(function () {
+                    o.uploadBase64(e.target.result),
+                        c.shadeLayer.closed()
+                })
+        },
+            i.readAsDataURL(t)
+    }
+    var t = document.getElementById("text_in");
+    t.addEventListener("paste",
+        function (t) {
+            var i, n, r, a = t || window.event,
+                o = a.clipboardData,
+                s = 0;
+            if (o) {
+                if (i = o.items, r = o.files, r && r.length) return void e(r[0]);
+                if (!i) return;
+                for (; s < i.length; s++) if ("file" === i[s].kind && i[s].type.match(/^image\//i)) {
+                    n = i[s];
+                    break
+                }
+                n && e(n)
+            }
+        })
+}

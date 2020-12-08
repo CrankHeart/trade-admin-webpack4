@@ -1,0 +1,378 @@
+<template>
+  <div ref="createAccountInvoice" class="create-account-invoice">
+    <div class="title">
+      <h3>开票信息</h3>
+    </div>
+    <el-card>
+      <el-form ref="form" :model="formData" label-width="150px" :rules="rules">
+        <el-form-item v-for="item in itemList" :key="item.prop" :label="item.label" :prop="item.prop">
+          <el-radio-group v-if="item.type === 'radio'" v-model="formData[item.prop]" :disabled="item.disabled">
+            <el-radio v-for="( option, index ) in item.options" :key="index" :label="option.id">{{option.name}}</el-radio>
+          </el-radio-group>
+          <el-input v-else-if="item.type === 'text'" type="text" v-model.trim="formData[item.prop]"></el-input>
+          <address-cascader v-else-if="item.type === 'address'" v-model="formData.companyAddress" @address-change="addressChange" :companyArea="companyArea"></address-cascader>
+          <template v-else>
+          </template>
+        </el-form-item>
+        <div v-if="isPaperInvoice" class="express-margin">
+          <el-form-item v-for="express in expressMsgs" :key="express.prop" :label="express.label" :prop="express.prop">
+            <address-cascader v-if="express.type === 'expressAddress'" v-model="formData[express.prop]" @address-change="expressChange" :companyArea="expressArea"></address-cascader>
+            <el-input v-else-if="express.type === 'text'" v-model.trim="formData[express.prop]" :placeholder="express.placeholder"></el-input>
+            <template v-else></template>
+          </el-form-item>
+        </div>
+      </el-form>
+      <span class="apply-btn">
+        <el-button type="default" @click="cancelInvoice">取消</el-button>
+        <template v-if="edit">
+          <el-button v-if="$permissionValidate( permissionEditInvoiceBtn )" type="primary" :disabled="applyBtnDisable" @click="editInvoice">确定</el-button>
+        </template>
+        <template v-else>
+          <el-button v-if="$permissionValidate( 1086 )" type="primary" :loading="applyBtnDisable" @click="applyInvoice">申请开票</el-button>
+        </template>
+      </span>
+    </el-card>
+  </div>
+</template>
+
+<script lang="ts">
+import Vue from 'vue'
+import { Component, Prop, Inject } from 'vue-property-decorator'
+import { Getter } from 'vuex-class'
+import { Loading } from 'element-ui'
+import API from '../../../API'
+import { invoiceKind, invoiceType } from '../../order/const/invoiceConst'
+import addressCascader from '../../../components/addressCascader.vue'
+import permission from '../permissions/accountInvoiceHeader'
+
+@Component( {
+  name: 'create-account-invoice',
+  components: {
+    addressCascader
+  },
+  mixins: [ permission ]
+} )
+export default class CreateAccountInvoice extends Vue {
+  @Prop( { default: '' } ) officeId: string
+  @Prop( { default: '' } ) tenantId: string
+  @Prop( { default: '' } ) accountCheckSn: string
+  @Prop( { default: () => { } } ) invoiceMsg: any //如果不为空,说明是已经开发发票的信息
+  @Prop( { default: false } ) edit: boolean
+  @Prop( { default: false} ) hadInvoice:boolean //?这个字段是啥意思,已经开过发票? 已经开过不允许在变更类型
+
+  // @Getter( 'address/allAddressObj' ) allAddressObj
+
+  // companyAddress: any = {}
+  companyArea: any = []
+  expressArea: any = []
+  expressAddress: string = ''
+
+  applyBtnDisable: boolean = false
+
+  formData: any = {
+    invoiceKind: null,
+    invoiceType: null,
+    invoiceTitle: null,
+    taxpayerId: null,
+    companyAddress: null,
+    companyAddressDetail: null,
+    invoiceMobile: null,
+    bankDeposit: null,
+    bankAccount: null,
+    consignee: null,
+    consigneeTel: null,
+    consigneeAddress: null
+  }
+
+  itemList: any[] = [
+    { prop: 'invoiceKind', label: '开票方式', type: 'radio', disabled: this.hadInvoice, options: invoiceKind },
+    { prop: 'invoiceType', label: '发票类型', type: 'radio', options: invoiceType },
+    { prop: 'taxpayerId', label: '企业税号', type: 'text' },
+    { prop: 'invoiceTitle', label: '发票抬头', type: 'text' },
+    { prop: 'address', label: '地址', type: 'address' },
+    { prop: 'invoiceMobile', label: '电话', type: 'text' },
+    { prop: 'bankDeposit', label: '开户银行', type: 'text' },
+    { prop: 'bankAccount', label: '银行卡号', type: 'text' },
+  ]
+
+  expressMsgs: any[] = [
+    { prop: 'consignee', label: '快递信息', type: 'text', placeholder: '联系人' },
+    { prop: 'consigneeTel', label: '', type: 'text', placeholder: '联系方式' },
+    { prop: 'consigneeAddress', label: '', type: 'expressAddress', placeholder: '联系地址' },
+  ]
+
+  rules: any = {
+    invoiceKind: [
+      { required: true, message: '请选择开票方式', type: 'number', trigger: 'change' }
+    ],
+    invoiceType: [
+      { required: true, message: '请选择发票类型', type: 'number', trigger: 'change' }
+    ],
+    taxpayerId: [
+      { required: true, message: '请填写企业税号', trigger: 'blur' }
+    ],
+    invoiceTitle: [
+      { required: true, message: '请填写发票抬头', trigger: 'blur' }
+    ],
+    invoiceMobile: [
+      { validator: this.validateHandler( 'invoiceMobile' ), trigger: 'blur' }
+    ],
+    bankDeposit: [
+      { validator: this.validateHandler( 'bankDeposit' ), trigger: 'blur' }
+    ],
+    bankAccount: [
+      { validator: this.validateHandler( 'bankAccount' ), trigger: 'blur' }
+    ],
+    address: [
+      { validator: this.validateAddress, trigger: 'blur' }
+    ],
+    consignee: [
+      { validator: this.validateConsigneeHandler( 'consignee' ), trigger: 'blur' }
+    ],
+    consigneeTel: [
+      { validator: this.validateConsigneeHandler( 'consigneeTel' ), trigger: 'blur' }
+    ],
+    consigneeAddress: [
+      { validator: this.validateConsigneeHandler( 'consigneeAddress' ), trigger: 'blur' }
+    ]
+  }
+
+  get isCommonInvoice () {
+    return this.formData.invoiceType === 0
+  }
+
+  get invoiceId () {
+    return this.invoiceMsg.userInvoiceDataId || ''
+  }
+
+  get isPaperInvoice () {
+    return this.formData && this.formData.invoiceKind === 1
+  }
+
+  created () {
+    let keys = Object.keys( this.invoiceMsg )
+    if ( keys.length > 0 ) {
+      Object.keys( this.formData ).forEach( v => {
+        this.formData[ v ] = this.invoiceMsg[ v ]
+      } )
+      // this.formData.companyAddressDetail = this.invoiceMsg.companyAddress
+      let { companyProvinceId, companyCityId, companyCountryId } = this.invoiceMsg
+      this.companyArea = [ +companyProvinceId, +companyCityId, +companyCountryId ]
+      if ( this.isPaperInvoice ) {
+        let { consigneeProvinceId, consigneeCityId, consigneeCountryId } = this.invoiceMsg
+        this.expressArea = [ +consigneeProvinceId, +consigneeCityId, +consigneeCountryId ]
+        // this.expressAddress = this.expressArea.reduce( ( total, curr ) => total += this.allAddressObj[ curr ] || '', '' )
+        // this.formData.consigneeAddress = this.formData.consigneeAddress.slice( this.expressAddress.length )
+      }
+    }
+  }
+
+  addressChange ( v ) {
+    this.formData.companyAddressDetail = v.companyAddress
+    this.companyArea = v.companyArea
+  }
+
+  expressChange ( v ) {
+    this.expressAddress = v.companyAddress
+    this.expressArea = v.companyArea
+    let consigneeAddress = this.formData.consigneeAddress
+    if( consigneeAddress.indexOf(v.companyAddress) === 0 ) {
+      this.formData.consigneeAddress = consigneeAddress.slice( this.expressAddress.length )
+    }
+  }
+
+  validateHandler ( type ) {
+    const validateMsg = {
+      invoiceMobile: '请填写电话',
+      bankDeposit: '请填写开户银行',
+      bankAccount: '请填写银行卡号'
+    }
+    const self = this
+    return function ( rule, value, callback ) {
+      if ( self.isCommonInvoice ) {
+        callback()
+      } else {
+        if ( !value ) {
+          callback( new Error( validateMsg[ type ] ) )
+        } else {
+          callback()
+        }
+      }
+    }
+  }
+
+  validateAddress ( rule, value, callback ) {
+    if ( this.isCommonInvoice || this.formData.invoiceType == undefined ) {
+      callback()
+      return
+    }
+    if ( !this.formData.companyAddressDetail ) {
+      callback( new Error( '请选择区域地址' ) )
+    } else if ( !this.formData.companyAddress ) {
+      callback( new Error( '请输入详细地址' ) )
+    } else {
+      callback()
+    }
+  }
+
+  validateConsigneeHandler ( type ) {
+    const validateMsg = {
+      consignee: '请填写联系人',
+      consigneeTel: '请填写联系电话',
+      consigneeAddress: '请填写详细地址'
+    }
+    const self = this
+    return function ( rule, value, callback ) {
+      if ( !self.isPaperInvoice ) {
+        callback()
+      } else {
+        if ( !value ) {
+          callback( new Error( validateMsg[ type ] ) )
+        } else {
+          callback()
+        }
+      }
+    }
+  }
+
+  applyInvoice () {
+    let isValid = false
+    let form: any = this.$refs[ 'form' ]
+
+    form.validate( ( valid ) => {
+      isValid = valid
+      return isValid
+    } )
+    if ( !isValid ) {
+      return
+    }
+    this.$permissionValidateWithNotify( 1086 )
+    this.applyBtnDisable = true
+    this.$http( API.makeAccountEInvoice, this.formatParam() ).then( ( res ) => {
+      this.$notify( {
+        type: 'success',
+        message: '申请成功'
+      } )
+      this.applyBtnDisable = false
+      let loadingInstance = Loading.service( {
+        target: this.$refs[ 'createAccountInvoice' ],
+        text: '申请开票中...'
+      } )
+      setTimeout( () => {
+        loadingInstance.close()
+        this.$emit( 'success' )
+      }, 3000 )
+
+    } ).catch( err => {
+      this.$notify( {
+        type: 'error',
+        message: err.data.msg || '申请失败，请重试'
+      } )
+      this.applyBtnDisable = false
+    } )
+  }
+
+  formatParam () {
+    let param: any = {
+      tenantId: this.tenantId,
+      accountCheckSn: this.accountCheckSn,
+      officeId: this.officeId,
+      ...this.formData
+    }
+    if ( this.isPaperInvoice ) {
+      param.consigneeAddress = this.expressAddress + this.formData.consigneeAddress
+    } else {
+      delete param.consigneeAddress
+      delete param.consignee
+      delete param.consigneeTel
+    }
+    if ( this.invoiceId ) {
+      param.userInvoiceDataId = this.invoiceId
+    }
+
+    param.companyAddress = param.companyAddressDetail + param.companyAddress
+
+    return param
+  }
+  cancelInvoice () {
+    this.$emit( 'cancel' )
+  }
+  editInvoice () {
+    let isValid = false
+    let form: any = this.$refs[ 'form' ]
+
+    form.validate( ( valid ) => {
+      isValid = valid
+      return isValid
+    } )
+    if ( !isValid ) {
+      return
+    }
+    let param = this.formatEditParam()
+    this.applyBtnDisable = true
+    this.$http( API.updateInvoiceApplyInfo, param ).then( ( { data } ) => {
+      this.$notify( {
+        type: 'success',
+        message: data.msg
+      } )
+      let msg =  {
+        ...param,
+        companyProvinceId: this.companyArea[0] || 0,
+        companyCityId: this.companyArea[1] || 0 ,
+        companyCountryId: this.companyArea[2] || 0,
+        consigneeProvinceId: this.expressArea[0] || 0,
+        consigneeCityId: this.expressArea[1] || 0 ,
+        consigneeCountryId: this.expressArea[2] || 0,
+      }
+      this.$emit( 'success', msg )
+      this.applyBtnDisable = false
+    } ).catch( ( { data = {} } ) => {
+      this.applyBtnDisable = false
+      this.$notify( {
+        type: 'error',
+        message: data.msg || '开票信息编辑失败'
+      } )
+    } )
+  }
+
+  formatEditParam () {
+    let param: any = {
+      ...this.formData,
+      id: this.invoiceMsg.id,
+      applySn: this.invoiceMsg.applySn,
+      companyAddressDetail: this.formData.companyAddressDetail + this.formData.companyAddress,
+    }
+    if ( !this.isPaperInvoice ) {
+      param.consigneeAddress = ''
+      param.consignee = ''
+      param.consigneeTel = ''
+      this.expressArea = []
+    } else {
+      param.consigneeAddress = this.expressAddress + this.formData.consigneeAddress
+    }
+
+    return param
+  }
+}
+</script>
+
+<style lang="stylus" scoped>
+.create-account-invoice
+  .title
+    display flex
+    align-items center
+    margin-bottom 20px
+    span
+      flex 1
+      text-align right
+  .apply-btn
+    display inline-block
+    margin-left 50%
+    transform translateX(-50%)
+  .express-margin
+    border-top 1px solid #ccc
+    padding-top 20px
+  .consignee-item
+    margin-bottom 22px
+</style>
+

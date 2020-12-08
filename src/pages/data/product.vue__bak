@@ -1,0 +1,38 @@
+<template>
+  <div id="data-product">
+    <lc-title text="商品数据"></lc-title>
+    <!-- <product-daily></product-daily>
+    <product-sleep></product-sleep> -->
+    <product-spu-top></product-spu-top>
+  </div>
+</template>
+<script lang="ts">
+import Vue from 'vue'
+import { Component, Inject } from 'vue-property-decorator'
+import lcTitle from '../../components/title.vue'
+import API from '../../API'
+import productDaily from './components/productDaily.vue'
+import productSleep from './components/productSleep.vue'
+import productSpuTop from './components/productSpuTop.vue'
+@Component( {
+  name: 'data-product2',
+  components: {
+    lcTitle,
+    productDaily,
+    productSleep,
+    productSpuTop
+  }
+} )
+export default class DataProduct2 extends Vue {
+
+}
+</script>
+<style lang="stylus" scoped>
+#data-product {
+  .box {
+    min-height: auto;
+    margin-bottom: 20px;
+  }
+}
+</style>
+

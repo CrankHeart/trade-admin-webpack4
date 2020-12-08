@@ -1,0 +1,302 @@
+<template>
+  <div id="product-detail">
+    <lc-title text="商品详情">
+      <!-- <el-button @click="save" type="primary" class="pull-right">保存</el-button> -->
+    </lc-title>
+    <spu-detail :data="spuData" @save-spu="saveSpu"></spu-detail>
+    <sku-detail v-model="skuData" :spu-data="spuData"></sku-detail>
+    <vice-intro-detail :spu="spuData" :vice-pic="vicePicList" :aptitude-list="aptitudeInfo" @handler="viceIntroHandler" :key="productId"></vice-intro-detail>
+
+    <aptitudePop v-model="aptitudePopVisible" v-if="aptitudePopVisible" :type="myType" :isEdit="true" :item="myItem"></aptitudePop>
+    <img-pop v-model="imgPopVisible" v-if="imgPopVisible" :type="myType" :isEdit="true" :item="myItem"></img-pop>
+  </div>
+</template> 
+
+<script lang="ts">
+import Vue from "vue"
+import { Component, Prop, Inject } from "vue-property-decorator"
+import lcTitle from "../../components/title.vue"
+import spuDetail from "./components/detailSpu.vue"
+import skuDetail from "./components/detailSku.vue"
+import viceIntroDetail from "./components/detailViceIntro.vue"
+import API from "../../API/"
+import { State, Getter, Mutation, Action } from "vuex-class"
+import aptitudePop from './components/aptitudePop.vue'
+import imgPop from './components/imgPop'
+
+@Component( {
+  name: "product-detail",
+  components: {
+    lcTitle,
+    spuDetail,
+    skuDetail,
+    viceIntroDetail,
+    aptitudePop,
+    imgPop
+  }
+} )
+export default class ProductDetail extends Vue {
+  @Action( "category/getAllCategory2" ) getAllCategory
+  @State( state => state.category.category2 ) allTypes
+
+  @Action( "brand/getAllBrands" ) getAllBrands
+  @State( state => state.brand.brandList ) brandList
+  @Action( 'message/msgHandled' ) callBack
+
+  aptitudePopVisible = false
+  imgPopVisible = false
+  myType = void 0
+  myItem = void 0
+  initAptitudePop () {
+    let { lcSpuCode, lcSkuCode, type } = this.$route.query
+    if ( Number( type ) <= 3 ) {
+      if ( lcSpuCode ) {
+        this.myType = 0
+        this.myItem = this.spuData
+      } else if ( lcSkuCode ) {
+        this.myType = 1
+        this.myItem = this.skuData.filter( v => v.lcCode === lcSkuCode )[ 0 ]
+      }
+      this[ Number( type ) == 3 ? 'imgPopVisible' : 'aptitudePopVisible' ] = true
+    }
+  }
+  created () {
+    this.getAllCategory()
+    this.getAllBrands()
+  }
+  tableData: any = {}
+  get productId () {
+    return this.$route.params.id
+  }
+  get spuData (): any {
+    let { spu = {}, vicePicList } = this.tableData
+    return Object.assign( spu, { imgList: vicePicList } )
+  }
+  @Inject() formatMyDate
+  get skuData (): any[] {
+    let sku = this.tableData.sku || []
+    let skuData = sku.map( v => {
+      if ( v.expirationDate && v.expirationDate.time ) {
+        return ( {
+          ...v,
+          imgList: v.skuPicList,
+          expirationDate: this.formatMyDate( v.expirationDate.time, 'yyyy-MM-dd hh:mm:ss' )
+        } )
+      } else {
+        return ( {
+          ...v,
+          imgList: v.skuPicList
+        } )
+      }
+    } )
+    return skuData
+  }
+  set skuData ( v ) {
+    this.tableData.sku = v
+  }
+  get vicePicList () {
+    return this.tableData.vicePicList || []
+  }
+
+  get aptitudeInfo () {
+    let aptitudeInfo: any = JSON.parse( this.spuData.aptitudeInfo || "[]" )
+    for ( let i = 0; i < 10; i++ ) {
+      if ( aptitudeInfo[ i ] ) {
+        if ( !aptitudeInfo[ i ].hasOwnProperty( "endDate" ) ) {
+          aptitudeInfo[ i ].endDate = ""
+        }
+      } else {
+        aptitudeInfo[ i ] = {
+          imagePath: "",
+          sequence: "",
+          endDate: ""
+        }
+      }
+    }
+    aptitudeInfo.length = 10
+    return Array.prototype.slice.call( aptitudeInfo )
+  }
+  set aptitudeInfo ( val ) {
+    let o = {}
+    val.forEach( ( v, i ) => {
+      o[ i ] = v
+    } )
+    this.spuData.aptitudeInfo = JSON.stringify( o )
+  }
+  activated () {
+    this.getData()
+  }
+  deactivated () {
+    this.tableData = {}
+  }
+  getData () {
+    this.$http( API.getProductExtroInfoList, {
+      id: this.productId
+    } ).then( res => {
+      let data = res.data
+      let spu = data.spu
+      let sku = data.sku
+
+      let skuLen = sku.length
+      // 验证商品唯一性所需字段
+      let { storeId, brandId, name } = spu
+      spu.storeBak = storeId
+      spu.brandBak = brandId
+      spu.nameBak = name
+      sku.forEach( v => {
+        // v.unit = "件"
+        v.isLocked = true
+        // v.skuType = 1
+        v.contrastingRelations = JSON.parse( v.contrastingRelations || '[]' )
+      } )
+      this.tableData = data
+      this.initAptitudePop()
+    } ).catch( err => {
+      this.$router.push( { name: "404" } )
+    } )
+  }
+
+  viceIntroHandler ( type, o ) {
+    if ( type == "fileUpload" ) {
+      this.fileUploadCallBack( o )
+    } else if ( type == "delPic" ) {
+      this.delPicCallBack( o )
+    } else if ( type == "editDate" ) {
+      this.editDateCallBack( o )
+    }
+  }
+  editDateCallBack ( { endDate, order } ) {
+    let arr = this.aptitudeInfo.concat()
+    arr[ order ].endDate = endDate
+    this.aptitudeInfo = arr
+  }
+  fileUploadCallBack ( o ) {
+    if ( o.type == "1" ) {
+      // 主图
+      this.spuData.goodsImage = "--"
+    } else if ( o.type == "4" ) {
+      // 文描
+      this.spuData.imageIntroduce = o.imageIntroduce
+    } else if ( o.type == "5" ) {
+      // 资质--编辑后数据同步
+      let obj = {
+        imagePath: o.file,
+        sequence: o.order,
+        date: ""
+      }
+      let arr = this.aptitudeInfo.concat()
+      arr[ o.order ] = obj
+      this.aptitudeInfo = arr
+    } else {
+      // 2 .3 处理副图更新
+      const arr = this.tableData.vicePicList.filter( ( v, i ) => {
+        return v.sequence !== o.order
+      } )
+      this.tableData.vicePicList = arr.concat( {
+        sequence: o.order,
+        image: o.file
+      } )
+    }
+  }
+  delPicCallBack ( o ) {
+    // 删除
+    let { type, index, order } = o; // type==5 为资质
+    if ( type == "1" && index == "" ) {
+      this.spuData.goodsImage = ""
+    } else if ( type == "2" ) {
+      const arr = this.tableData.vicePicList.filter( ( v, i ) => {
+        return v.sequence !== index
+      } )
+      this.tableData.vicePicList = arr
+    } else if ( type == "5" ) {
+      // 资质-删除
+      let arr = this.aptitudeInfo.concat()
+      arr.splice( order, 1, null )
+      this.aptitudeInfo = arr
+    } else {
+      // type =='3'
+      let image = this.spuData.imageIntroduce
+      let arr = image.split( ";" )
+      arr.splice( index, 1, "" )
+      this.spuData.imageIntroduce = arr.join( ";" )
+    }
+  }
+
+  valideSubmit () {
+    let spu = this.spuData
+    return (
+      this.validateLevelPrice( spu ) &&
+      this.validateType( spu ) &&
+      this.validateBrand( spu )
+      // &&this.validateSku( spu )
+    )
+  }
+  saveSpu () {
+    let spu = this.spuData
+    if ( spu.label === "订购商品" ) {
+      spu.label = ""
+    }
+    if ( !this.valideSubmit() ) {
+      return
+    }
+
+    this.$http( API.updateSpuStoreAttributes, {
+      // sku: this.tableData.sku,
+      spu,
+      broadcast: true
+    } ).then( res => {
+      let { type } = this.$route.query
+      // this.$notify( {
+      //   type: 'success',
+      //   message: '保存成功！'
+      // } )
+      if ( type !== undefined ) {
+        this.callBack( { id: spu.id, type } )
+      }
+    } )
+  }
+  validateLevelPrice ( spu ) {
+    if (
+      !+spu[ "level0Price" ] ||
+      !+spu[ "level1Price" ] ||
+      !+spu[ "level2Price" ]
+    ) {
+      this.$notify( {
+        type: "error",
+        message: "SPU折算率不能为0！"
+      } )
+      return false
+    }
+    return true
+  }
+  validateType ( spu ) {
+    const newType = this.allTypes.filter( ( v, i ) => {
+      return v.id == spu.category3stId
+    } )[ 0 ]
+
+    if ( !newType ) {
+      this.$notify( {
+        type: "error",
+        message: "类目识别错误，请联系管理员！"
+      } )
+      return false
+    }
+    spu.category3stName = newType && newType.name
+    return true
+  }
+  validateBrand ( spu ) {
+    const newBrand = this.brandList.filter( ( v, i ) => {
+      return v.id == spu.brandId
+    } )[ 0 ]
+    if ( !newBrand ) {
+      this.$notify( {
+        type: "error",
+        message: "品牌识别错误，请联系管理员！"
+      } )
+      return false
+    }
+    spu.brandName = newBrand.name
+    return true
+  }
+}
+</script>

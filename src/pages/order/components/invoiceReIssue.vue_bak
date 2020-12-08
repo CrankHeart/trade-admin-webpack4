@@ -1,0 +1,123 @@
+<template>
+  <el-dialog class="invoice-reissue" title="重开发票" v-model="visible" :before-close="closeDialog">
+    <el-form ref="my-form">
+      <el-form-item v-for="item in formBase" :key="item.prop" :label="item.label+'：'" :prop="item.prop" :class="{'is-error':validateResult[item.prop],'is-required':item.required}">
+        <template v-if="item.type=='radio'">
+          <el-radio-group v-model="form[item.prop]" @change="radioChange(item)">
+            <el-radio :label="option.id" v-for="option in item.options" :key="option.id">{{option.name}}</el-radio>
+          </el-radio-group>
+        </template>
+        <template v-else-if="item.type=='cascader'">
+          <el-input v-model="form.addressDetail">
+            <el-cascader slot="prepend" :options="allAddress" v-model="form.address" filterable change-on-select :class="{'small': !form.address.length }"></el-cascader>
+          </el-input>
+        </template>
+        <template v-else>
+          <el-input v-model="form[item.prop]" :placeholder="'请输入'+item.label"></el-input>
+        </template>
+        <p v-if="item.prop=='title'">根据国家税务总局公告2017年第16号，自2017年7月1日起，您必须提交【购买方纳税人识别号】或 统一社会信用代码</p>
+      </el-form-item>
+    </el-form>
+    <div slot="footer" class="center">
+      <el-button @click="closeDialog">取 消</el-button>
+      <el-button type="primary" @click="submitForm">确 定</el-button>
+    </div>
+  </el-dialog>
+</template>
+<script lang="ts">
+  import Vue from 'vue'
+  import { Component, Prop, Watch } from 'vue-property-decorator'
+  import { State, Getter, Action } from 'vuex-class'
+  import { invoiceReIssueModule } from '../const/invoiceConst'
+  @Component({
+    name: 'invoice-reissue'
+  })
+  export default class InvoiceReIssue extends Vue {
+    @Prop()
+    item
+    form = {
+      model: 0,
+      type: 0,
+      title: '',
+      code: '',
+      address: [],
+      phone: '',
+      bank: '',
+      account: '',
+      addressDetail: ''
+    }
+    get formBase() {
+      invoiceReIssueModule.forEach((val: any, index) => {
+        val.required = true
+        if (index > 2 && this.isRegularInvoice) {
+          val.required = false
+        }
+      })
+      return invoiceReIssueModule
+    }
+    visible = true
+    isRegularInvoice: boolean = true
+    @Action('address/getAddress') getAddress
+    @Getter('address/allAddress') allAddress
+    @Getter('address/allAddressObj') allAddressObj
+
+    created() {
+      this.getAddress()
+    }
+    radioChange(item) {
+      let prop = item.prop
+      if (prop == 'type') {
+        this.isRegularInvoice = this.form[prop] === 0
+      }
+    }
+
+    submitForm() {
+      this.validate()
+    }
+    validateResult: any = {} // 未通过验证
+    validateCheck(prop: string, result: boolean) {
+      this.$set(this.validateResult, prop, result)
+      return result
+    }
+    validate() {
+      let myForm: any = this.$refs['my-form']
+      console.log(this.form)
+    }
+    saveInvoice() {
+
+    }
+    closeDialog() {
+      this.$emit('close')
+      this.visible = true
+    }
+  }
+</script>
+<style lang="stylus" >
+.invoice-reissue
+  .el-dialog
+    top 10%!important
+  .el-cascader
+    width 250px
+    transition all .5s
+    &.small
+      width 90px
+    .el-input__inner
+      border none
+      height 34px
+  .el-dialog__body
+    padding 18px
+  .el-form-item
+    margin-bottom 12px
+    p
+      font-size 12px
+      color #aaa
+      line-height 14px
+    .el-form-item__label
+      width 130px
+    .el-form-item__content
+      margin-left 130px
+  .is-error
+    .el-input-group__prepend
+      border-color #ff4949
+</style>
+

@@ -1,0 +1,158 @@
+<template>
+  <div id="vip-user">
+    <lc-title text="月结客户管理"></lc-title>
+    <el-row>
+      <el-col :lg="8" :xs="18" :sm="11">
+        <lc-tenant-search @broadcast="addTenant" :has-submit-btn="true" ref="tenant-search"></lc-tenant-search>
+      </el-col>
+    </el-row>
+    <hr>
+    <el-button class="pull-right" type="primary" icon="arrow-left" @click="backToList" v-if="selected.length">返回</el-button>
+    <lc-table :config="config" :data="filterData" @cur-change="curChange" :page="page" :key="config.length">
+      <template slot-scope="scope">
+        <template v-if="scope.con.prop==='control'">
+          <el-switch v-model="scope.row.enabled" on-text="开启" :on-value="1" :off-value="0" off-text="暂停" @change="changeState(scope.row)">
+          </el-switch>
+        </template>
+        <template v-else-if="scope.con.prop==='createDate'">
+          {{formatData(scope.row)}}
+        </template>
+        <template v-else-if="scope.con.prop==='settlementMethod'">
+          <el-select v-model="scope.row.settlementMethod" placeholder="请选择" :key="scope.row.id" @change="updataMonthlyUser(scope.row)" size="small" :disabled="!scope.row.enabled">
+            <el-option v-for="settlementMethod in settlementMethods" :label="settlementMethod.name" :value="settlementMethod.id" :key="settlementMethod.id"></el-option>
+          </el-select>
+        </template>
+        <template v-else>{{scope.row[scope.con.prop]}}</template>
+      </template>
+    </lc-table>
+  </div>
+</template>
+<script lang="ts">
+import Vue from "vue"
+import { Component, Inject } from "vue-property-decorator"
+import lcTitle from "../../components/title.vue"
+import lcTable from "../../components/table/"
+import lcTenantSearch from "../../components/tenantSearch/index.vue"
+import { Mutation, Getter } from "vuex-class"
+import { settlementMethods } from './const'
+import API from "../../API"
+@Component( {
+  name: "vip-user",
+  components: {
+    lcTitle,
+    lcTable,
+    lcTenantSearch
+  }
+} )
+export default class VipUser extends Vue {
+  config = [
+    { label: "企业名称", prop: "tenantName" },
+    { label: "Tenant ID", prop: "tenantId" },
+    { label: "添加日期", prop: "createDate" },
+    { label: "结算方式", prop: "settlementMethod" },
+    { label: "操作", prop: "control" }
+  ]
+  data = []
+  selected = []
+  page = {
+    cur: 1,
+    num: 10,
+    total: 0
+  }
+  get filterData () {
+    var arr = []
+    if ( this.selected.length ) {
+      arr = this.selected
+    } else {
+      arr = this.data
+    }
+    return arr
+  }
+  settlementMethods = settlementMethods
+  backToList () {
+    this.selected = []
+    let tenantSearch: any = this.$refs[ "tenant-search" ]
+    tenantSearch.clearTenant()
+  }
+  @Inject() formatMyDate
+  formatData ( item ) {
+    let time =
+      ( item.createDate && item.createDate.time ) ||
+      ( item.updateDate && item.updateDate.time )
+    return this.formatMyDate( time, "yyyy-MM-dd" )
+  }
+  addTenant ( item ) {
+    this.$http( API.monthlyUserAdd, {
+      tenantId: item.id,
+      tenantName: item.name,
+      settlementMethod: 30
+    } ).then(
+      ( { data } ) => {
+        this.selected = []
+        this.data.push( ...data.data )
+        this.page.total++
+      },
+      ( { data } ) => {
+        this.selected = []
+        if ( data && data.code === "A0001" ) {
+          this.selected.push( ...( data.data || [] ) )
+        } else {
+          this.$notify( {
+            type: "error",
+            message: data.msg || "添加月结用户失败！"
+          } )
+        }
+        this.page.total = this.filterData.length
+      }
+    )
+  }
+  activated () {
+    this.search()
+  }
+  changeState ( item ) {
+    const { tenantId, id, enabled, tenantName } = item
+    this.changeUser( {
+      id,
+      tenantId,
+      enabled: +enabled
+    } ).then( ( { data } ) => {
+      this.$notify( {
+        type: "success",
+        message: tenantName + "月结用户" + ( !enabled ? "关闭" : "开启" ) + "成功！"
+      } )
+    } )
+  }
+  updataMonthlyUser ( item ) {
+    const { tenantId, tenantName, settlementMethod, id } = item
+    this.changeUser( {
+      id,
+      tenantId,
+      settlementMethod
+    } ).then( ( { data } ) => {
+      this.$notify( {
+        type: "success",
+        message: tenantName + "月结类型修改成功！"
+      } )
+    } )
+  }
+  changeUser ( data ) {
+    return this.$http( API.updateUser, data )
+  }
+  curChange ( cur ) {
+    this.page.cur = cur
+    this.search()
+  }
+  search () {
+    let num = this.page.num
+    let start = ( this.page.cur - 1 ) * num
+    this.$http( API.monthlyUserSearch, {
+      start,
+      num
+    } ).then( ( { data } ) => {
+      this.data = data.data.list
+      this.page.total = data.data.total
+    } )
+  }
+}
+</script>
+

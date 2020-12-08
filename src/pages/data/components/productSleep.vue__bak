@@ -1,0 +1,62 @@
+<template>
+  <div class="data-product-sleep box">
+    <h3 class="relative">
+      沉睡商品TOP{{data.length}}
+      <tool-tips :has-view="false" :tips-html="tipsHtml"></tool-tips>
+    </h3>
+    <br>
+    <table-view :config="config" :data="data">
+      <template slot-scope="scope">
+        {{scope.row[scope.con.prop]}}
+      </template>
+    </table-view>
+  </div>
+</template>
+<script lang="ts">
+import Vue from 'vue'
+import { Component, Inject } from 'vue-property-decorator'
+import tableView from './tableView.vue'
+import toolTips from './toolTips.vue'
+import API from '../../../API'
+@Component( {
+  name: 'data-product-sleep',
+  components: {
+    toolTips,
+    tableView
+  }
+} )
+export default class DataProductSleep extends Vue {
+  tipsHtml: string = `商品沉睡度指商品滞销程度，当前有库存储备的的商品，<br/> 从上次成交至今越久排名越高。`
+  config = [
+    { prop: 'index', label: '排名', width: '90' },
+    { prop: 'name', label: '名称' },
+    { prop: 'spu', label: 'LC code' },
+    { prop: 'lastSalesTime', label: '上次交易时间' },
+    { prop: 'saleNumber', label: '销量', width: '100' },
+    { prop: 'sales', label: '销售额' }
+  ]
+  data = []
+  activated () {
+    this.getData()
+  }
+  dateChange ( v ) {
+    if ( v ) {
+      this.getData()
+    }
+  }
+  @Inject() formatMyDate
+  getData () {
+    this.$http( API.getDominantProductsRank, {
+      sort: 0
+    } ).then( ( { data } ) => {
+      let d = data.data
+      d.forEach( ( v, i ) => {
+        v.index = i + 1
+      } )
+      this.data = d
+    }, rej => {
+      this.data = []
+    } )
+  }
+}
+</script>

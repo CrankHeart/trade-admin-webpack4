@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>资质打印</title>
+    <style type="text/css">
+      div {
+        margin-bottom: 10px;
+        width: 1000px;
+        height: 1442px;
+        text-align: center;
+        line-height: 1442px;
+      }
+
+      img {
+        max-width: 1000px;
+        max-height: 1442px;
+        vertical-align: middle;
+      }
+    </style>
+  </head>
+
+  <body>
+    <script>
+      window.onload = function () {
+        try {
+          const fragment = document.createDocumentFragment();
+          let imgList = JSON.parse(sessionStorage.getItem("pics"));
+
+          const len = imgList.length;
+          let count = 0;
+
+          imgList.forEach((src) => {
+            let oDiv = document.createElement("div");
+            let oImg = new Image();
+            oImg.onload = function () {
+              oDiv.appendChild(oImg);
+              fragment.appendChild(oDiv);
+              count++;
+              console.log(count, len);
+              if (count == len) {
+                document.body.appendChild(fragment);
+                window.print();
+              }
+            };
+            oImg.src = src;
+          });
+        } catch (e) {
+          confirm("系统无法正常打印，请重试");
+          window.location.href = "/";
+        }
+      };
+    </script>
+  </body>
+</html>

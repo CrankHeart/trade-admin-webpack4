@@ -1,0 +1,81 @@
+import { Component } from 'vue-property-decorator'
+import API from '../../../API'
+import CheckOrderList from '../../server/checkOrderList.vue'
+import MonthCustomerAccount from '../../server/monthCustomerAccount.vue'
+
+@Component( {
+  name: 'PortraitDetailCheckOrders',
+  components: {
+  }
+} )
+export default class PortraitDetailCheckOrders extends CheckOrderList {
+  fromPortraitComponent: boolean = true
+  tenantId: string = ''
+  officeId: string = ''
+  isActived: boolean = false
+
+  fillinBankSnPermissionId = 778
+  deleteCheckOrderPermissionId = 779
+  checkBankStatePermissionId = 780
+  exportPermissionId = 781
+  created () {
+    this.searchByLifeCycle()
+  }
+
+  activated () {
+    this.searchByLifeCycle()
+  }
+
+  searchByLifeCycle () {
+    let { tenant_id, office_id } = this.$route.query
+    this.tenantId = tenant_id
+    this.officeId = office_id
+    this.formatCondition()
+    this.searchCheckOrders()
+    this.isActived = true
+  }
+
+  // 重置父类中的该方法，阻止页面跳转
+  routeChange () { }
+  search () {
+    if ( this.isActived ) {
+      this.searchCheckOrders()
+    }
+  }
+
+  formatCondition () {
+    this.condition = this.condition.filter( v => v.key !== 'office' )
+  }
+
+  formatSearchParam () {
+    this.dataAdapter()
+    let o = this.params
+    o.tenantId = this.tenantId
+    o.officeId = this.officeId
+    return o
+  }
+
+
+  searchCheckOrders () {
+    this.$permissionValidateWithNotify( 777 )
+    this.$http( API.accountCheckList, this.formatSearchParam() ).then( ( { data } ) => {
+      data = data.data
+      this.data = data.list
+      this.page.total = data.total
+    }, rej => {
+      this.page.total = 0
+      this.data = []
+    } )
+  }
+
+  exportByAccountCheck ( sn: string = '' ) {
+    if ( sn.length === 0 ) return
+
+    this.$submit( API.exportAccountCheck, {
+      accountCheckSn: sn,
+      tenantId: this.tenantId,
+      officeId: this.officeId
+    } )
+
+  }
+}

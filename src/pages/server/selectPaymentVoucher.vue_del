@@ -1,0 +1,62 @@
+<template>
+  <div id="select-payment-voucher">
+    <!-- <el-tabs v-model="activeName" v-if="!tabModule">
+      <el-tab-pane name="commonCustomer" label="普通客户">
+      </el-tab-pane>
+      <el-tab-pane name="monthlyCustomer" label="月结客户">
+      </el-tab-pane>
+    </el-tabs> -->
+    <!-- <select-customer :customer="tabModule ? 'monthlyCustomer' : activeName" @addPaymentVoucherDialog="addPaymentVoucherDialog"></select-customer> -->
+    <select-customer :customer="'monthlyCustomer'" @addPaymentVoucherDialog="addPaymentVoucherDialog"></select-customer>
+    <el-dialog size="large" v-if="paymentVoucherDialog" v-model="paymentVoucherDialog" :title="'新建付款凭证'" :close-on-click-modal="false">
+      <create-payment-voucher :orderType="1" :voucherStatus="0" :reverseSign="0" :officeName="paymentVoucherOfficeName" @change-payment-voucher-dialog="changePaymentVoucherDialog"></create-payment-voucher>
+    </el-dialog>
+  </div>
+</template>
+<script lang="ts">
+  import Vue from 'vue'
+  import {Component, Prop, Inject} from 'vue-property-decorator'
+  import lcTitle from '../../components/title.vue'
+  import lcCondition from '../../components/condition.vue'
+  import selectCustomer from './components/selectCustomer.vue'
+  import lcTable from '../../components/table/index'
+  import {State, Mutation, Getter, Action} from 'vuex-class'
+  import {formatMyDate} from '../../utils/index'
+  import { matchArrItem } from '../../utils'
+  import API from '../../API'
+  import createPaymentVoucher from './createPaymentVoucher.vue'
+  @Component( {
+    name: 'select-payment-voucher',
+    components: {
+      lcTitle,
+      selectCustomer,
+      createPaymentVoucher
+    }
+  } )
+  export default class selectPaymentVoucher extends Vue {
+    @Getter( 'order/paymentVoucherListConfig' ) baseConfig
+    // activeName: string = ''
+    // @Prop( { default: 0 } )
+    // tabModule: number
+    get config() {
+      return this.baseConfig.filter( v => v.isChecked )
+    }
+    paymentVoucherDialog: boolean = false
+    paymentVoucherOfficeName: string = ''
+    addPaymentVoucherDialog( v ){
+      this.paymentVoucherDialog = v.paymentVoucherDialog
+      this.paymentVoucherOfficeName = v.officeName
+    }
+    changePaymentVoucherDialog( v ){
+      this.paymentVoucherDialog = false
+      if(v.dialog){
+        this.$emit('change-active-name')
+      }
+    }
+    // created(){
+    //   this.activeName = 'monthlyCustomer'
+    // }
+
+
+}
+</script>

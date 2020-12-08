@@ -1,0 +1,499 @@
+<template>
+  <div class="supplier-basicInfo">
+    <el-form label-width="130px" width="60%" v-if="form">
+      <div class="supplier-item-row">
+        <el-form-item label="供应商名称">
+          <el-input v-model="form.supplierName" size="small" placeholder="请输入供应商名称">
+          </el-input>
+        </el-form-item>
+        <el-form-item label="采购负责人">
+          <el-select v-model="form.personInCharge" placeholder="请选择">
+            <el-option v-for="item in principalOptions" :key="item['id']" :label="item['userName']" :value="item['userName']">
+            </el-option>
+          </el-select>
+        </el-form-item>
+      </div>
+      <div class="supplier-item-row">
+        <el-form-item label="供应商联系人">
+          <el-input v-model="form.contactName" size="small" placeholder="请输入联系人">
+          </el-input>
+        </el-form-item>
+          <el-form-item label="供应商联系人手机">
+          <el-input v-model="form.contactTel" size="small" placeholder="请输入手机号码">
+          </el-input>
+        </el-form-item>
+      </div>
+      <div class="supplier-item-row">
+        <el-form-item label="开户行">
+          <el-input v-model="form.bankName" size="small" placeholder="请输入开户行">
+          </el-input>
+        </el-form-item>
+        <el-form-item label="银行账户">
+          <el-input v-model="form.settlementAccounts" size="small" placeholder="请输入银行账户">
+          </el-input>
+        </el-form-item>
+      </div>
+      <div>
+        <el-form-item label="供应商公司电话">
+          <el-input v-model="form.companyMobile" size="small" placeholder="请输入供应商公司电话">
+          </el-input>
+        </el-form-item>
+      </div>
+      <!--经销协议-->
+      <div class="supplier-item-row">
+        <el-form-item label="经销协议">
+          <div class='upload-container'>
+            <input type="file" @change="fileChange" />
+            <div class="upload-mask">
+               选择文件
+            </div>
+            <span class="uploadFile-name" v-if="form.agreement">{{form.agreement.split('/')[1]}}</span>
+          </div>
+        </el-form-item>
+        <el-form-item label="有效日期">
+          <el-date-picker :editable="false" clearable v-model="form.effectiveDate" @change="handleDatePiceker"  type="daterange" align="left" placeholder="选择日期范围" format='yyyy-MM-dd'>
+          </el-date-picker>
+        </el-form-item>
+      </div>
+      <!--公司地址-->
+      <div class="supplier-item-row supplier-company-address">
+        <el-form-item label="供应商详细地址" class="address" >
+          <el-cascader :options="areaList" class="address-area" v-model="companyArea" size="small" @change="handleAreaChange" :disabled="!areaList.length">
+          </el-cascader>
+          <el-input v-model="form.companyDetail" class="address-detail" size="small" placeholder="请输入供应商详细地址">
+          </el-input>
+        </el-form-item>
+      </div>
+      <!--备注-->
+      <div class="supplier-item-row">
+        <el-form-item label="备注">
+          <el-input type="textarea" v-model="form.remark" placeholder="添加一些备注"></el-input>
+        </el-form-item>
+      </div>
+      <div class="supplier-item-row">
+        <el-button type="primary" @click="saveBasicInfo">保存</el-button>
+        <el-button type="primary" @click="goStep1">下一步</el-button>
+      </div>
+    </el-form>
+  </div>
+</template>
+<script lang="ts">
+import Vue from "vue";
+import { Component, Prop, Inject, Watch } from "vue-property-decorator";
+import { Getter, State, Mutation, Action } from "vuex-class";
+import API from "../../../API";
+import { formatMyDate } from "../../../utils/index";
+import lcTitle from "../../components/title.vue";
+@Component({
+  name: "supplier-basicInfo"
+})
+export default class supplierInfo extends Vue {
+  @Getter("address/allAddress") areas;
+  @Inject() formatMyDate;
+  @Mutation("supplier/setShouldInit") setShouldInit;
+  // data-- 初始化数据
+  form = {
+    agreement: "",
+    bankName: "",
+    companyAddress: "",
+    companyDetail: "",
+    companyMobile: "",
+    contactName: "",
+    contactTel: "",
+    effectiveBeginDate: "",
+    effectiveEndDate: "",
+    effectiveDate: [],
+    personInCharge: "",
+    remark: "",
+    settlementAccounts: "",
+    supplierName: "",
+    supplierStatus: 0
+  };
+  supplierId = 0;
+  principalOptions = []; //负责人
+  companyArea = [];
+  areaList = [];
+  file = null;
+  // created watch
+  deactivated() {
+    this.$destroy();
+  }
+  created() {
+    this.getUsersByRoled();
+    this.getAreaList();
+  }
+  //  定义methods 的方法
+  //获取责任人信息
+  getUsersByRoled() {
+    this.$http(API.getUsersByRoleId, { roleId: 6 }).then(({ data }) => {
+      this.principalOptions = data.data;
+    });
+  }
+  //获取地址列表
+  getAreaList() {
+    this.$http(API.getAddressList).then(({ data }) => {
+      this.areaList = this.handleAraeList(data.data);
+    });
+  }
+  //处理地址返回
+  handleAraeList(areaList) {
+    let options = [];
+    areaList.forEach((item, index) => {
+      let obj = {
+        value: item.id,
+        label: item.name,
+        children: []
+      };
+      item.result.forEach((secItem, index) => {
+        let secObj = {
+          value: secItem.id,
+          label: secItem.name,
+          children: []
+        };
+        if (secItem.result) {
+          secItem.result.forEach((thrItem, index) => {
+            let thrObj = {
+              value: thrItem.id,
+              label: thrItem.name
+            };
+            secObj.children.push(thrObj);
+          });
+        }
+        obj.children.push(secObj);
+      });
+      options.push(obj);
+    });
+    return options;
+  }
+  // 得到联动的地址
+  handleAreaChange(val) {
+    this.companyArea = val;
+    let form = this.form;
+    this.areaList.forEach(provinceItem => {
+      let [provinceId, cityId, countyId] = val;
+      if (provinceItem.value === provinceId) {
+        let companyAddress = provinceItem.label;
+        provinceItem.children.forEach(cityItem => {
+          if (cityItem.value === cityId) {
+            let specialProvinceIds = [1, 18, 792, 2240];
+            if (specialProvinceIds.indexOf(provinceItem.value) === -1) {
+              companyAddress += cityItem.label;
+            }
+            cityItem.children.forEach(countyItem => {
+              if (countyItem.value === countyId) {
+                companyAddress += countyItem.label;
+              }
+            });
+          }
+        });
+        form.companyAddress = companyAddress;
+      }
+    });
+  }
+  //处理日期
+  handleDatePiceker() {
+    if (!this.form.effectiveDate) {
+      this.form.effectiveDate = [];
+      return;
+    }
+    let startTime = this.form.effectiveDate[0],
+      endTime = this.form.effectiveDate[1],
+      start = new Date(startTime).getTime(),
+      end = new Date(endTime).getTime(),
+      now = new Date().getTime();
+    if (end < now) {
+      this.form.supplierStatus = 1;
+      this.$notify({
+        type: "warning",
+        message: "截至时间必须大于当前时间"
+      });
+    } else if (!startTime) {
+      this.$notify({
+        type: "warning",
+        message: "请选择有效日期"
+      });
+    }
+  }
+  //上传经销协议
+  fileChange($event) {
+    let { target } = $event;
+    let { files } = target;
+    this.file = files[0];
+    this.form.agreement = this.file ? "/" + files[0].name : "";
+  }
+  //上传协议
+  uploadAgreement(id) {
+    let myFormData = new FormData();
+    myFormData.append("id", id);
+    myFormData.append("file", this.file);
+    this.$http(API.uploadAgreement, myFormData, {
+      headers: {
+        "content-type": "multipart/form-data"
+      }
+    }).then(
+      ({ data }) => {},
+      () => {
+        this.$message({
+          message: "经销协议上传失败",
+          type: "error"
+        });
+      }
+    );
+  }
+  //得到3级地址
+  getAddressArea() {}
+  // 保存
+  saveBasicInfo() {
+    if (!this.validForm()) {
+      return;
+    }
+    let isGoStep = false;
+    this.httpSaveBasicInfo(isGoStep);
+  }
+  //下一步
+  goStep1() {
+    let isGoStep = true;
+    if (!this.validForm()) {
+      return;
+    }
+    this.httpSaveBasicInfo(isGoStep);
+  }
+
+  httpSaveBasicInfo(isGoStep) {
+    let params = Object.assign({}, this.form);
+    params.effectiveBeginDate = this.form.effectiveDate[0];
+    params.effectiveEndDate = this.form.effectiveDate[1];
+    params.supplierName = this.form.supplierName.trim();
+    delete params["effectiveDate"];
+    if (this.supplierId) {
+      params["id"] = this.supplierId;
+    }
+    this.$http(API.saveSupplierInfo, params).then(
+      ({ data }) => {
+        this.setShouldInit(true);
+        this.supplierId = data.data;
+        this.uploadAgreement(data.data);
+        if (isGoStep) {
+          // 新建时下一步操作
+          this.$emit("goStep2", { supplierId: data.data, step: 1 });
+        } else {
+          //保存操作
+          this.$emit("goStep2", { supplierId: data.data, step: 0 });
+          this.$notify({
+            type: "success",
+            message: data.msg
+          });
+        }
+      },
+      ({ data }) => {
+        this.$notify({
+          type: "warning",
+          message: data.msg
+        });
+      }
+    );
+  }
+  validForm() {
+    let reg = /^[0-9]*$/;
+    let {
+      supplierName,
+      companyAddress,
+      personInCharge,
+      companyDetail,
+      contactName,
+      contactTel,
+      companyMobile,
+      bankName,
+      settlementAccounts,
+      effectiveBeginDate
+    } = this.form;
+    supplierName = supplierName.trim();
+    if (!supplierName) {
+      this.$notify({
+        title: "新建供应商",
+        type: "warning",
+        message: "供应商名称不能为空"
+      });
+      return false;
+    }
+    if (!personInCharge) {
+      this.$notify({
+        title: "新建供应商",
+        type: "warning",
+        message: "请选择采购负责人"
+      });
+      return false;
+    }
+    if (!contactName) {
+      this.$notify({
+        title: "新建供应商",
+        type: "warning",
+        message: "供应商联系人不能为空"
+      });
+      return false;
+    }
+    if (!contactTel || (contactTel && !reg.test(contactTel))) {
+      this.$notify({
+        title: "新建供应商",
+        type: "warning",
+        message: "请填写供应商的联系手机"
+      });
+      return false;
+    }
+    if (!bankName) {
+      this.$notify({
+        title: "新建供应商",
+        type: "warning",
+        message: "开户行不能为空"
+      });
+      return;
+    }
+    if (!settlementAccounts) {
+      this.$notify({
+        title: "新建供应商",
+        type: "warning",
+        message: "银行账户不能为空"
+      });
+      return false;
+    }
+    let telReg = /^\d{3,5}-\d{6,8}$|^\(\d{3,5}\)-\d{6,8}$|^\d{6,8}$|^1[34578]\d{9}$/;
+    if (!companyMobile || (companyMobile && !telReg.test(companyMobile))) {
+      this.$notify({
+        title: "新建供应商",
+        type: "warning",
+        message: "请填写正确的供应商的公司电话"
+      });
+      return false;
+    }
+    if (!this.form.agreement) {
+      this.$notify({
+        title: "新建供应商",
+        type: "warning",
+        message: "请上传经销协议"
+      });
+      return false;
+    }
+    let startTime = this.form.effectiveDate[0],
+      endTime = this.form.effectiveDate[1],
+      start = new Date(startTime).getTime(),
+      end = new Date(endTime).getTime(),
+      now = new Date().getTime();
+    if (!startTime) {
+      this.$notify({
+        title: "新建供应商",
+        type: "warning",
+        message: "请选择有效日期"
+      });
+      return;
+    } else if (end < now) {
+      this.$notify({
+        title: "新建供应商",
+        type: "warning",
+        message: "截至时间必须大于当前时间"
+      });
+      return;
+    }
+    if (!companyAddress || !companyDetail) {
+      this.$notify({
+        title: "新建供应商",
+        type: "warning",
+        message: "供应商详细地址不能为空"
+      });
+      return false;
+    }
+    return true;
+  }
+}
+</script>
+<style lang="stylus" scoped>
+.supplier-basicInfo {
+  .supplier-item-row {
+    width: 60%;
+    display: flex;
+    justify-content: flex-start;
+  }
+
+  .supplier-item-row+ .supplier-item-row {
+    margin-top: -10px;
+  }
+
+  .supplier-item-row:last-child {
+    margin-top: 20px;
+    margin-left: 5%;
+
+    .el-button {
+      width: 80px;
+    }
+  }
+
+  .supplier-item-row:nth-of-type(7) {
+    width: 100%;
+  }
+
+  .el-textarea {
+    width: 80%;
+  }
+
+  .el-form-item {
+    width: 50%;
+  }
+
+  .supplier-item-row:nth-of-type(6) {
+    margin-bottom: 15px;
+
+    .el-form-item {
+      dispaly: flex;
+    }
+
+    .address {
+      width: 80%;
+    }
+
+    .address-area {
+      width: 35%;
+    }
+
+    .address-detail {
+      width: 55%;
+    }
+  }
+
+  .upload-container {
+    position: relative;
+    margin-top: 5px;
+
+    input {
+      position: absolute;
+      top: 0;
+      left: 0;
+      z-index: 10;
+      width: 90px;
+      height: 25x;
+      border: 1px solid red;
+      opacity: 0;
+    }
+
+    .upload-mask {
+      position: relative;
+      top: 0;
+      left: 0;
+      z-index: 1;
+      width: 90px;
+      height: 25px;
+      line-height: 25px;
+      cursor: pointer;
+      text-align: center;
+      background-color: #20a0ff;
+      color: #ffffff;
+    }
+
+    .uploadFile-name {
+      line-height: 20px;
+      position: absolute;
+      top: 0px;
+      left: 90px;
+    }
+  }
+}
+</style>
+

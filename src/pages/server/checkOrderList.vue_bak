@@ -1,0 +1,292 @@
+<template>
+  <div id="server-check-order-list">
+    <lc-title v-if="!fromPortraitComponent" text="核对订单列表"></lc-title>
+    <lc-condition :condition="condition" @submit="search" label-width="100px"></lc-condition>
+    <div class="check-order-button">
+      <el-button :disabled="!selectedData.length" size="small" type="primary" @click="fillinBankSnVisible = true" v-if="$permissionValidate(fillinBankSnPermissionId)">银行流水填写</el-button>
+      <el-button :disabled="!selectedData.length" size="small" type="primary" @click="deleteCheckOrderItem" v-if="$permissionValidate(deleteCheckOrderPermissionId)">作废</el-button>
+      <el-button :disabled="!selectedData.length" size="small" type="primary" @click="checkBankStatement" v-if="$permissionValidate(checkBankStatePermissionId)">核对确认</el-button>
+      <!-- <el-button :disabled="!selectedData.length" size="small" type="primary" @click="exportSelectedCheckOrder" v-if="$permissionValidate(593) && !fromPortraitComponent">导出选中</el-button>
+      <el-button size="small" type="primary" @click="exportCheckOrder" v-if="$permissionValidate(674) && !fromPortraitComponent">导出全部</el-button> -->
+      <el-button size="small" type="primary" @click="showExportDialog" v-if="$permissionValidate(exportPermissionId)">导出</el-button>
+    </div>
+    <lc-table-config :base-config="baseConfig" @set-config="setOrderCheckConf"></lc-table-config>
+    <lc-table :selection="$permissionValidate([fillinBankSnPermissionId,deleteCheckOrderPermissionId,checkBankStatePermissionId])" :config="config" :data="data" @cur-change="curChange" :page="page" @size-change="sizeChange" :key="config.length" @data-selection-change="dataSelectionChange">
+      <template slot-scope="scope">
+        <template v-if="scope.con.prop==='orderDate'||scope.con.prop==='checkingDate'">
+          {{formatMyDate(scope.row[scope.con.prop]['time'])}}
+        </template>
+        <template v-else-if="scope.con.prop === 'serviceOrderAmounts'">
+          {{Number(scope.row[scope.con.prop]).toFixed(2)}}
+        </template>
+        <template v-else-if="scope.con.prop === 'orderAmount'">
+          {{scope.row['memberOrder'] && scope.row['memberOrder']['paymentAmountString']}}
+        </template>
+        <template v-else-if="scope.con.prop === 'bankSn'">
+          <div v-for="(item,index) in scope.row['accountCheckingSubList']" :key="index">
+            {{item.bankSn}}
+          </div>
+        </template>
+        <template v-else-if="scope.con.prop === 'serviceOrderList'">
+          <div v-for="(item,index) in scope.row[scope.con.prop]" :key="index">
+            单号:{{item.serviceSn}} 金额:{{Number(item.refundAmount).toFixed(2)}}
+          </div>
+        </template>
+        <template v-else-if="scope.con.prop === 'checkStatus'">
+          {{formatCheckStatus(scope.row[scope.con.prop])}}
+        </template>
+        <template v-else-if="scope.con.prop === 'control'">
+          <router-link :to="`/server/checkOrder/detail/${scope.row['orderSn']}`" v-if="$permissionValidate(589)">查看详情</router-link>
+        </template>
+        <template v-else>
+          {{scope.row[scope.con.prop]}}
+        </template>
+      </template>
+    </lc-table>
+    <fillin-bank-sn :selectedData="selectedData" v-model="fillinBankSnVisible" @changeData="changeData"></fillin-bank-sn>
+    <account-check-sn v-model="accountCheckDialog" @accountCheck="exportByAccountCheck"></account-check-sn>
+  </div>
+</template>
+<script lang="ts">
+import Vue from 'vue'
+import { Component, Prop, Inject } from 'vue-property-decorator'
+import lcTitle from '../../components/title.vue'
+import lcCondition from '../../components/condition.vue'
+import lcTableConfig from '../../components/table/control.vue'
+import lcTable from '../../components/table/index'
+import { State, Mutation, Getter, Action } from 'vuex-class'
+import { formatMyDate } from '../../utils/index'
+import { orderCheckStatus } from './const/serverConstant'
+import fillinBankSn from './components/fillinBankSn.vue'
+import AccountCheckSn from '../vip/components/exportAccountCheck.vue'
+import { matchArrItem } from '../../utils'
+import API from '../../API'
+@Component( {
+  name: 'server-check-order-list',
+  components: {
+    lcTitle,
+    lcCondition,
+    lcTableConfig,
+    lcTable,
+    fillinBankSn,
+    AccountCheckSn
+  }
+} )
+export default class serverCheckOrderList extends Vue {
+  @Mutation( 'server/setOrderCheckConf' ) setOrderCheckConf
+  @Getter( 'server/orderCheckConfig' ) baseConfig
+  @Action( 'server/getAccountCheckingList' ) getAccountCheckingList
+  @Action( 'server/saveBankSnBatch' ) saveBankSnBatch
+  @State( state => state.server.accountCheckingList ) accountCheckingList
+  orderCheckStatus = orderCheckStatus
+  fillinBankSnVisible: any = false
+  accountCheckDialog: boolean = false
+  fillinBankSnPermissionId = 590
+  deleteCheckOrderPermissionId = 591
+  checkBankStatePermissionId = 592
+  exportPermissionId = 593
+
+  get config () {
+    return this.baseConfig.filter( v => v.isChecked )
+  }
+  fromPortraitComponent: boolean = false
+  condition = [
+    { value: '', key: 'accountCheckSn', label: '对账流水号', type: 'text' },
+    { value: '', key: 'bankSn', label: '银行流水号', type: 'text' },
+    { value: '', key: 'orderSn', label: '订单', type: 'text' },
+    // {value: '', key: 'tenantName', label: '集团名称', type: 'tenantSearch'},
+    { value: {}, key: 'office', label: '集团门诊', type: 'officeSearch' },
+    { value: [], key: 'checkingDate', label: '核对发起时间', type: 'daterange' },
+    { value: [], key: 'orderDate', label: '下单时间', type: 'daterange' },
+    { value: '', key: 'checkStatus', label: '订单核对状态', type: 'radio', options: orderCheckStatus },
+  ]
+  data = []
+  page: any = {
+    cur: 1,
+    num: 50,
+    total: 0,
+    sizes: [ 10, 20, 30, 40, 50 ]
+  }
+  activated () {
+    this.search()
+  }
+  sizeChange ( v ) {
+    this.page.num = v
+    this.page.cur = 1
+    this.search()
+  }
+  formatMyDate = formatMyDate
+  formatCheckStatus ( id ) {
+    return matchArrItem( id, orderCheckStatus, 'id' ).name
+  }
+  search ( cur?: number ) {
+    this.$permissionValidateWithNotify( 588 )
+    this.page.cur = cur || this.page.cur
+    this.dataAdapter()
+    let o = this.params
+    this.getAccountCheckingList( o ).then( res => {
+      this.data = res.list
+      this.page.total = res.total
+    } )
+  }
+  dataSelectionChange ( arr ) {
+    this.selectedData = arr
+  }
+  selectedData: any = []
+  params: any = {}
+  dataAdapter () {
+    let o: any = {}
+    o.start = ( this.page.cur - 1 ) * ( this.page.num )
+    o.num = this.page.num
+    let route: any = {}
+    this.condition.forEach( val => {
+      let { key, value } = val
+      route[ key ] = value
+      if ( key == 'checkingDate' || key == 'orderDate' ) {
+        if ( value && value[ 0 ] ) {
+          route[ key ] = []
+          let myKeys = key == 'checkingDate' ? [ 'checkingDateBegin', 'checkingDateEnd' ] : [ 'orderDateBegin', 'orderDateEnd' ]
+          route[ key ][ 0 ] = o[ myKeys[ 0 ] ] = this.formatMyDate( value[ 0 ] )
+          route[ key ][ 1 ] = o[ myKeys[ 1 ] ] = this.formatMyDate( value[ 1 ], 'yyyy-MM-dd hh:mm:ss', true )
+        }
+      } else if ( key == 'office' ) {
+
+        let officeValue: any = value || {}
+        let { officeId, officeName, tenantId, tenantName } = officeValue
+        route.tenantId = o.tenantId = tenantId
+        route.tenantName = o.tenantName = tenantName
+
+        if ( officeId ) {
+          route.officeName = o.officeName = officeName
+          route.officeId = o.officeId = officeId
+        }
+
+        delete route[ key ]
+
+      } else {
+        if ( value !== '' ) {
+          o[ key ] = value
+        } else {
+          delete route[ key ]
+        }
+      }
+    } )
+    this.params = o
+    this.routeChange( route )
+  }
+  routeChange ( query ) {
+    this.$router.push( {
+      path: '/server/checkOrderList',
+      query
+    } )
+  }
+  curChange ( cur ) {
+    this.page.cur = cur
+    this.search()
+  }
+  deleteCheckOrderItem () {
+    let params = this.selectedData.map( v => ( { 'orderSn': v.orderSn, 'accountCheckSn': v.accountCheckSn, 'id': v.id } ) )
+    this.$http( API.obsoleteOrder, params ).then( ( { data } ) => {
+      if ( data.failedList ) {
+        let a = data.failedList
+        for ( let i = 0; i < a.length; i++ ) {
+          setTimeout( () => {
+            this.$notify( {
+              type: 'error',
+              message: `订单为${a[ i ][ 'orderSn' ]}:${a[ i ][ 'msg' ]}`
+            } )
+          }, 200 )
+        }
+      }
+      if ( data.successList.length ) {
+        if ( !data.failedList ) {
+          this.$notify( {
+            type: 'success',
+            message: '删除成功'
+          } )
+        }
+        let successOrderSnList = data.successList.map( v => v.orderSn )
+        let iList = []
+        this.data.forEach( ( v, i ) => {
+          if ( successOrderSnList.indexOf( v.orderSn ) > -1 ) {
+            iList.push( i )
+          }
+        } )
+        iList.forEach( v => {
+          this.data.splice( v, 1 )
+        } )
+      }
+    } )
+  }
+  checkBankStatement () {
+    let checkStatusList = this.selectedData.filter( v => v.checkStatus == 0 )
+    let params = checkStatusList && checkStatusList.map( v => ( { 'orderSn': v.orderSn, 'id': v.id } ) )
+    if ( !params.length ) {
+      return this.$notify( {
+        type: 'warning',
+        message: '请至少选中一个未核对的单号'
+      } )
+    }
+    this.$http( API.checkOrders, params ).then( res => {
+      this.$notify( {
+        type: 'success',
+        message: '核对成功'
+      } )
+      this.selectedData.forEach( v => {
+        let index = this.data.indexOf( v )
+        if ( index > -1 ) {
+          this.$set( this.data[ index ], 'checkStatus', 1 )
+        }
+      } )
+    } )
+  }
+  // exportSelectedCheckOrder () {
+  //   let ids = this.selectedData.map( v => v.id ).join( ';' )
+  //   this.$submit( API.exportCheckingList, { ids: ids, type: 0 }, true )
+  // }
+  // exportCheckOrder () {
+  //   if ( !this.data.length ) return
+  //   let s = [ 'num', 'start' ]
+  //   let params = {}
+  //   Object.keys( this.params ).forEach( v => {
+  //     if ( s.indexOf( v ) == -1 ) {
+  //       params[ v ] = this.params[ v ]
+  //     }
+  //   } )
+  //   this.$submit( API.exportCheckingList, { ...params, type: 1 }, true )
+  // }
+  changeData ( v ) {
+    let params = this.selectedData.map( val => ( {
+      orderSn: val[ 'orderSn' ],
+      bankSn: v[ 'bankSn' ],
+      accountCheckSn: val[ 'accountCheckSn' ]
+    } ) )
+    this.saveBankSnBatch( params ).then( ( { data } ) => {
+      this.$notify( {
+        type: 'success',
+        message: `${data.msg}`
+      } )
+      params.forEach( val => {
+        this.data.forEach( value => {
+          if ( val.orderSn == value.orderSn ) {
+            value.accountCheckingSubList.push( val )
+          }
+        } )
+      } )
+    } )
+  }
+  showExportDialog () {
+    this.accountCheckDialog = true
+  }
+  exportByAccountCheck ( sn: string = '' ) {
+    if ( sn.length === 0 ) return
+    this.$submit( API.exportAccountCheck, {
+      accountCheckSn: sn
+    } )
+  }
+}
+</script>
+<style lang="stylus" scoped>
+.check-order-button
+  margin 10px
+</style>

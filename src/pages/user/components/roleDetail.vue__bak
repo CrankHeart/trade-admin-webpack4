@@ -1,0 +1,214 @@
+<template>
+  <div>
+    <el-tabs v-model="activePage">
+      <el-tab-pane label="权限" name="permission"></el-tab-pane>
+      <el-tab-pane label="成员" name="member"></el-tab-pane>
+    </el-tabs>
+    <div class="box" :style="{height:height}">
+      <transition name="el-zoom-in-top">
+        <div class="role-permission relative" v-if="activePage=='permission'">
+          <el-tree :data="allPermission" show-checkbox node-key="id" default-expand-all auto-expand-parent :default-checked-keys="permissionList" @check-change="checkChange" :props="defaultProps" ref="permissionTree">
+          </el-tree>
+          <el-button :disabled="isDisabled" type="primary" class="save-btn" @click="save">保存修改</el-button>
+        </div>
+
+        <div class="role-member" v-if="activePage=='member'">
+          <div class="role-member-add">
+            <el-select v-model="newUser" filterable placeholder="请选择" size="small">
+              <el-option v-for="user in filteredUser" :label="user.user.userName" :value="user.user.id" :key="user.user.id">
+              </el-option>
+            </el-select>
+            <el-button icon="plus" type="primary" size="small" @click="addUser">新增</el-button>
+          </div>
+          <hr>
+          <el-tag :key="user.userName" v-for="user in memberList" :closable="true" :close-transition="false" @close="willDelUser(user)">
+            {{user.userName}}
+          </el-tag>
+        </div>
+      </transition>
+
+    </div>
+    <!--删除用户提示-->
+    <el-dialog title="用户删除" v-model="dialogWillDelUser" size="tiny">
+      <p>是否要删除 【{{userWillDel&&userWillDel.userName}}】 的 【{{curRole.roleName}}】角色</p>
+      <span slot="footer" class="dialog-footer">
+        <el-button @click="dialogWillDelUser = false">取 消</el-button>
+        <el-button type="primary" @click="delUser">确 定</el-button>
+      </span>
+    </el-dialog>
+  </div>
+</template>
+<script lang="ts">
+import Vue from 'vue'
+import { Component, Inject, Prop, Watch } from 'vue-property-decorator'
+import { State, Getter, Action } from 'vuex-class'
+import API from '../../../API'
+@Component( {
+  name: 'role-detail2'
+} )
+export default class RoleDetail2 extends Vue {
+  activePage: string = 'member'
+  @Watch( 'activePage' )
+  activePageWatch ( v, o ) {
+    if ( v == 'member' ) {
+      this.getCurRoleMember()
+    }
+    if ( v == 'permission' ) {
+      this.getCurRolePermission()
+    }
+  }
+  activated () {
+    this.getUserList( { start: 0, num: 1000 } )
+    this.getPermissionAll()
+  }
+  @Getter( 'permission/getterPermissionAll' ) allPermission
+  @Action( 'permission/getPermissionAll' ) getPermissionAll
+  @State( state => state.permission.userList )
+  userList
+  @Action( 'permission/getUserList' ) getUserList
+  get filteredUser () {
+    return this.userList.filter( val => ( this.memberList.map( val => val.id ) ).indexOf( val.user.id ) < 0 )
+  }
+  @Prop() curRole
+  @Watch( 'curRole', { deep: true } )
+  curRoleWatcher ( v, o ) {
+    if ( v.id && v.id !== o.id ) {
+      let page: string = this.activePage
+      if ( page == 'member' ) {
+        this.getCurRoleMember()
+      }
+      if ( page == 'permission' ) {
+        this.getCurRolePermission()
+      }
+
+      // this.$scrollTo(this.$el, 500, { offset: -110 })
+    }
+  }
+  newUser: string = ''
+  userWillDel: any = null
+  dialogWillDelUser: boolean = false
+  willDelUser ( user ) {
+    this.userWillDel = user
+    this.dialogWillDelUser = true
+  }
+  delUser () {
+    this.$http( API.roleDelUser2, {
+      roleId: this.curRole.id,
+      userId: this.userWillDel.id
+    } ).then( ( { data } ) => {
+      let i = this.curRole.userList.indexOf( this.userWillDel )
+      console.log( this.curRole, this.userWillDel, i )
+      this.curRole.userList.splice( i, 1 )
+
+      this.userWillDel = null
+    } )
+    this.dialogWillDelUser = false
+  }
+  addUser () {
+    if ( !this.newUser ) return
+    if ( this.memberList.filter( v => v.id == this.newUser ).length ) {
+      return
+    }
+
+    this.$http( API.roleAddUser2, {
+      // 需改成roleName
+      roleName: this.curRole.roleName,
+      // roleId: this.curRole.id,
+      userId: this.newUser
+    } ).then( ( { data } ) => {
+      let user = this.userList.filter( val => val.user.id == this.newUser )
+      this.curRole.userList.push( user[ 0 ].user )
+    } )
+  }
+  getCurRoleMember () {
+    let role = this.curRole
+
+    if ( role.userList ) {
+      return
+    }
+    this.$http( API.roleGetUser2, {
+      // 需改成roleName
+      roleName: role.roleName
+      // roleId: role.id
+    } ).then( ( { data } ) => {
+      this.$set( role, 'userList', data.data )
+    } )
+  }
+  get permissionList () {
+    return this.curRole.permissionList
+  }
+  get memberList () {
+    return this.curRole.userList || []
+  }
+  checkedKeys: any[] = []
+  checkChange () {
+    let permissionTree: any = this.$refs.permissionTree
+    this.checkedKeys = permissionTree.getCheckedKeys()
+  }
+  get isDisabled () {
+    return (
+      ( !this.checkedKeys.length &&
+        !( this.permissionList && this.permissionList.length ) ) ||
+      ( this.permissionList &&
+        this.checkedKeys.toString() == this.permissionList.toString() )
+    )
+  }
+  roleStore: any = {}
+
+  getCurRolePermission () {
+    let role = this.curRole
+
+    if ( this.roleStore[ role.id ] ) {
+      // 设置子级
+      return this.setCheckedKeys( this.permissionList )
+    }
+    this.$http( API.roleGetPermission2, {
+      roleId: role.id
+    } ).then( ( { data } ) => {
+      let arr = []
+      data.data.forEach( v => {
+        v && arr.push( v.id )
+      } )
+      this.$set( role, 'permissionList', arr )
+      this.$set( this.roleStore, role.id, role )
+      this.setCheckedKeys( arr )
+    } )
+  }
+  setCheckedKeys ( arr = [] ) {
+    this.$nextTick( () => {
+      let permissionTree: any = this.$refs.permissionTree
+      permissionTree.setCheckedKeys( arr )
+    } )
+  }
+  save () {
+    let role = this.curRole
+    this.$http( API.rolePermissionUpdate2, {
+      permissionsIds: this.checkedKeys.join( ':' ),
+      roleId: role.id,
+      broadcast: true
+    } ).then( ( { data } ) => {
+      role.permissionList = this.checkedKeys
+    } )
+  }
+  defaultProps = {
+    children: 'children',
+    label: 'permissionName'
+  }
+  @Prop() height: string
+}
+</script>
+
+<style lang="stylus" scoped>
+.role-permission {
+  .el-button {
+    position: absolute;
+    right: 15px;
+    top: 15px;
+  }
+}
+
+.el-tag {
+  margin-right: 15px;
+  margin-bottom: 15px;
+}
+</style>

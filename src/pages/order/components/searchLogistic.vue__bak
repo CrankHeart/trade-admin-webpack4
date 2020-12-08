@@ -1,0 +1,172 @@
+<template>
+  <div>
+    <el-dialog title="物流信息" v-model="dialogVisible" class="logistic-msg">
+      <el-form label-width="80px">
+        <el-form-item label="物流公司">
+          <el-select clearable v-model="logistic.companyNameId" placeholder="请选择" size="small">
+            <el-option v-for="(item, index) in allLogistic" :key="index" :label="item.name" :value="item.id">
+            </el-option>
+          </el-select>
+          <el-button size="small" @click="addLogisticVisible=true">新增</el-button>
+        </el-form-item>
+        <el-form-item label="运单号">
+          <el-input v-model="logistic.trackingNumber" size="small"></el-input>
+        </el-form-item>
+      </el-form>
+
+      <lc-table :config="config" :data="logistic.LogisticsList" :has-page="false">
+        <template slot-scope="scope">
+
+          <template v-if="'storage,batchNumber'.split(',').indexOf(scope.con.prop)>-1">
+            <el-input v-model="scope.row[scope.con.prop]" size="small"></el-input>
+          </template>
+          <template v-else-if="scope.con.prop=='expirationDate'">
+            <el-date-picker clearable v-model="scope.row[scope.con.prop]" type="date" placeholder="选择日期" size="small">
+            </el-date-picker>
+          </template>
+          <template v-else>
+            {{scope.row[scope.con.prop]}}
+          </template>
+
+        </template>
+      </lc-table>
+      <span slot="footer" class="dialog-footer">
+        <el-button @click="closePrompt" size="small">取 消</el-button>
+        <el-button type="primary" @click="setPostDelivery" size="small">确 定</el-button>
+      </span>
+    </el-dialog>
+
+    <el-dialog title="添加物流公司" v-model="addLogisticVisible">
+      <el-input v-model="newLogistic" size="small" placeholder="请输入物流公司的名称"></el-input>
+      <br><br>
+      <el-button size="small" @click="addLogisticVisible=false">取消</el-button>
+      <el-button size="small" type="priamry" @click="saveNewLogistic">保存</el-button>
+    </el-dialog>
+  </div>
+</template>
+<script lang="ts">
+  import Vue from "vue"
+  import { Component, Prop, Watch, Inject } from "vue-property-decorator"
+  import API from "../../../API"
+  import { State, Action, Mutation } from "vuex-class"
+  import lcTable from "../../../components/table/index"
+  @Component({
+    name: "order-logistic",
+    components: {
+      lcTable
+    }
+  })
+  export default class OrderLogistic extends Vue {
+    @Prop() order: any
+    @State(state => state.logistic.logistic) allLogistic
+    @Action("logistic/getAllLogistic") getAllLogistic
+
+    logistic: any = {
+      companyNameId: "",
+      orderSn: "",
+      trackingNumber: "",
+      LogisticsList: []
+    }
+    addLogisticVisible: boolean = false
+    newLogistic: string = ""
+    config = [
+      { prop: "name", label: "商品名称"},
+      { prop: "storage", label: "储运条件"},
+      { prop: "batchNumber", label: "生产批号"},
+      { prop: "expirationDate", label: "失效日期"}
+    ]
+    initLogistic() {
+      this.logistic.orderSn = this.order.sn
+      this.order.itemList.forEach(val => {
+        this.logistic.LogisticsList.push({
+          name: val.name,
+          id: val.id,
+          storage: "",
+          batchNumber: "",
+          expirationDate: ""
+        })
+      })
+    }
+    @Inject() formatMyDate
+    setPostDelivery() {
+      //判断是否拥有物流公司
+      if (!this.logistic.companyNameId) {
+        this.$notify({
+          message: "请选择物流公司！",
+          type: "warning"
+        })
+        return
+      }
+      this.logistic.trackingNumber = this.logistic.trackingNumber.replace(
+        /\s+/g,
+        ""
+      )
+      this.logistic.LogisticsList.forEach((item, index) => {
+        item.expirationDate = !!item.expirationDate
+          ? this.formatMyDate(item.expirationDate, "yyyy-MM-dd")
+          : ""
+      })
+
+      this.$http(API.insertLogisticsInformation, this.logistic).then(res => {
+        this.dialogVisible = !this.dialogVisible
+        this.$emit("deliver-goods", this.order)
+      })
+    }
+    @Mutation("logistic/setShouldInit") setShouldInit
+    // 新增物流公司
+    saveNewLogistic() {
+      this.newLogistic = this.newLogistic.trim()
+      if (this.newLogistic == "") {
+        return
+      }
+
+      this.setShouldInit(true)
+
+      this.$http(API.addLogisticCompany, {
+        name: this.newLogistic,
+        broadcast: true
+      }).then(({ data }) => {
+        this.addLogisticVisible = false
+        this.logistic.companyNameId = +data.companyNameId
+        
+        this.getAllLogistic()
+      })
+    }
+    created() {
+      this.getAllLogistic()
+      this.initLogistic()
+    }
+    dialogVisible: boolean = true
+    @Watch("dialogVisible")
+    visibleWatcher(v) {
+      this.closePrompt()
+    }
+
+    closePrompt() {
+      this.$emit("visible-change", false, "logistic")
+      this.dialogVisible = true
+    }
+  }
+</script>
+<style lang="stylus">
+.logistic-msg {
+  .el-input {
+    max-width: 245px;
+  }
+
+  .el-table__body-wrapper {
+    max-height: 200px;
+    overflow-x: hidden;
+    overflow-y: auto;
+  }
+
+  .el-date-editor {
+    width: 140px;
+  }
+
+  .cell {
+    padding-left: 8px;
+    padding-right: 8px;
+  }
+}
+</style>

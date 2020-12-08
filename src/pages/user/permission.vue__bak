@@ -1,0 +1,43 @@
+<template>
+  <div id="user-permission">
+    <lc-title text="权限管理"></lc-title>
+    <el-row :gutter="30">
+
+      <el-col :sm="12">
+        <el-tabs value="">
+          <el-tab-pane label="权限列表" name=""></el-tab-pane>
+        </el-tabs>
+        <permission-list @edit-permission="edit"></permission-list>
+      </el-col>
+      <el-col :sm="12">
+        <el-tabs value="">
+          <el-tab-pane :label="(!!editItem?'编辑':'新增')+'权限'" name=""></el-tab-pane>
+        </el-tabs>
+        <div class="box">
+          <permission-edit :edit-item="editItem" @edit-permission="edit"></permission-edit>
+        </div>
+      </el-col>
+    </el-row>
+  </div>
+</template>
+<script lang="ts">
+import Vue from "vue"
+import { Component, Inject } from "vue-property-decorator"
+import lcTitle from "../../components/title.vue"
+import API from "../../API"
+import permissionEdit from "./components/permissionEdit2.vue"
+import permissionList from "./components/permissionList2.vue"
+@Component( {
+  name: "permission"
+
+} )
+export default class Permission extends Vue {
+  editItem: any = null
+  edit ( item = null ) {
+    this.editItem = item
+  }
+
+}
+</script>
+
+

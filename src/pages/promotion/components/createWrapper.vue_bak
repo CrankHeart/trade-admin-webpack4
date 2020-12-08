@@ -1,0 +1,328 @@
+<template>
+  <div id="promotion-create">
+    <create-link v-if="!isDetail && (type===void 0 || type==='')"></create-link>
+    <template v-else>
+      <lc-title :text="title"></lc-title>
+      <create-basic-info v-model="promotion" ref="basic" :is-detail="isDetail"></create-basic-info>
+      <create-sku-picker
+        v-model="promotion"
+        ref="product"
+        :check-trial-status="false"
+        :disabled="isDetail"
+      ></create-sku-picker>
+
+      <create-sku-price-setting
+        :promotion="promotion"
+        ref="price"
+        v-if="type==4"
+        :is-detail="isDetail"
+      ></create-sku-price-setting>
+
+      <create-rule-info
+        v-model="promotion"
+        ref="ruleInfo"
+        :type="type"
+        :is-detail="isDetail"
+        v-if="type!=4"
+      ></create-rule-info>
+
+      <div class="center">
+        <el-button @click="cancel ">取消</el-button>
+        <el-button @click="save" type="primary ">保存</el-button>
+        <el-button @click="submit" type="primary ">提交</el-button>
+      </div>
+    </template>
+  </div>
+</template>
+<script lang="ts"> 
+import Vue from 'vue'
+import { Component, Inject, Watch, Prop } from 'vue-property-decorator'
+import createLink from './createLink.vue'
+import lcTitle from '../../../components/title.vue'
+import createBasicInfo from './createBasic.vue'
+import createSkuPicker from './createSkuPicker.vue'
+import createSkuPriceSetting from './createSkuPriceSetting.vue'
+import createRuleInfo from './createRuleInfo.vue'
+import { types } from '../const/'
+import { matchArrItem } from '../../../utils/'
+import API from '../../../API'
+@Component( {
+  name: 'promotion-create-wrapper',
+  components: {
+    createLink,
+    createBasicInfo,
+    createSkuPicker,
+    createSkuPriceSetting,
+    createRuleInfo,
+    lcTitle
+  }
+} )
+export default class PromotionCreateWrapper extends Vue {
+  get title () {
+    let name = this.type !== void 0 && matchArrItem( this.type + '', types, 'id' ).name
+    return name ? `创建${name}促销` : ''
+  }
+  @Prop( { default: false } )
+  isDetail: boolean
+  promotion: any = {
+    startDate: '',
+    startTime: '',
+    endDate: '',
+    endTime: '',
+    type: '',
+    title: '',
+    subType: '',
+    priority: 100,
+    name: '',
+    brandProducts: [],
+    ruleInfo: {}
+  }
+  created () {
+    this.fitRuleInfo()
+
+    if ( this.discountId ) {
+      this.getPromotion()
+    }
+  }
+
+  fitRuleInfo () {
+    if ( this.type == 1 ) {
+      this.promotion.ruleInfo = []
+    } else {
+      this.promotion.ruleInfo = {}
+    }
+  }
+  getPromotion () {
+    this.$http( API.getPromotion, {
+      discountId: this.discountId
+    } ).then( ( { data } ) => {
+      this.initPromotion( data.discount )
+    } )
+  }
+  initPromotion ( discount ) {
+    function adapter ( str ) {
+      return +str < 10 ? '0' + str : str
+    }
+    let { title, name, priority, ruleInfo, rulePeriodStart, rulePeriodEnd, targetProductStr } = discount
+    // targetProductStr = '[{"spu":[{"id":"16494","type":1,"sku":[{"bottomPrice":33.8,"number":1,"stock":88,"name":"jz007","specification":"规格01","level1Price":2.0,"salesPrice":32.45,"settlePrice":32.45,"id":22483,"platformPrice":34.1,"lcSkuCode":"2200000003002"},{"bottomPrice":22.3,"number":1,"stock":98,"name":"jz007","specification":"规格02","level1Price":1.0,"salesPrice":22.3,"settlePrice":21.45,"id":22484,"platformPrice":22.5,"lcSkuCode":"2200000003003"}]}],"id":"605","type":1}]'
+    let targetProduct = this.decodeProduct( JSON.parse( targetProductStr || '[]' ) )
+    let o: any = { title, name, priority, ruleInfo }
+    o.ruleInfo = JSON.parse( ruleInfo || '{}' )
+
+    {
+      let { time, hours, minutes, seconds } = rulePeriodStart
+      o.startDate = new Date( time )
+      o.startTime = [ adapter( hours ), adapter( minutes ), adapter( seconds ) ].join( ':' )
+    }
+
+    {
+      let { time, hours, minutes, seconds } = rulePeriodEnd
+      o.endDate = new Date( time )
+      o.endTime = [ adapter( hours ), adapter( minutes ), adapter( seconds ) ].join( ':' )
+    }
+
+    o.type = o.ruleInfo.type
+    o.brandProducts = targetProduct
+
+    o.subType = o.ruleInfo.subType
+    if ( o.type == 1 ) {
+      o.ruleInfo = o.ruleInfo.ruleInfo
+    }
+
+    this.promotion = o
+
+  }
+  cancel () {
+    this.$router.push( 'list' )
+  }
+  validate () {
+    let $refs = this.$refs
+    let basic = $refs[ 'basic' ]
+    let product = $refs[ 'product' ]
+    let ruleInfo = $refs[ 'ruleInfo' ]
+    let productPrice = $refs[ 'price' ]
+    let arr = [ basic, product, ruleInfo, productPrice ]
+    for ( let i = 0, l = arr.length; i < l; i++ ) {
+      let vnode: any = arr[ i ]
+      if ( ( vnode == ruleInfo && this.type == 4 ) || ( vnode == productPrice && this.type != 4 ) ) {
+        continue
+      }
+
+      let result = vnode.validate()
+      if ( !result ) {
+        return false
+      }
+    }
+    return true
+  }
+  save () {
+    let option = this.formatRequestData()
+    if ( !this.validate() ) {
+      return
+    }
+    this.$http( API.savePromotion, {
+      ...option,
+      broadcast: true
+    } ).then( ( { data } ) => {
+      this.$router.push( 'list' )
+    } )
+  }
+  submit () {
+    let option = this.formatRequestData()
+    if ( !this.validate() ) {
+      return
+    }
+    this.$http( API.submitPromotion, {
+      ...option,
+      broadcast: true
+    } ).then( ( { data } ) => {
+      this.$router.push( 'list' )
+    } )
+  }
+  get type () {
+    let type = this.$route.query.type || this.promotion.type
+    return type
+  }
+  // @Watch('type')
+  // typeWatcher(){
+  //   this.fitRuleInfo()
+  // }
+  get discountId () {
+    let { query, params } = this.$route
+    return query.copyId || params.discountId || query.discountId
+  }
+  @Inject() formatMyDate
+  decodeProduct ( brandProducts ) {
+    let products = []
+    brandProducts.forEach( value => {
+      let { id, spu, type, name } = value
+      let brandId = id
+      if ( !type ) {
+        products.push( { brandId, type: 'brand', name } )
+      } else {
+        spu.forEach( val => {
+          let { id, type, sku, name } = val
+          let productId = id
+          if ( !type ) {
+            products.push( { productId, brandId, type: 'spu', name } )
+          } else {
+            sku.forEach( v => {
+              // 这里渲染时会带出来实时库存，这里先模拟下
+              if(!v.stock){
+                v.stock = 0
+              }
+              if(!v.specification){
+                v.specification = ""
+              }
+              products.push( { productId, brandId, ...v } )
+            } )
+          }
+        } )
+      }
+    } )
+    return products
+  }
+  encodeProduct ( brandProducts ) {
+    let products = {}
+    brandProducts.forEach( val => {
+      let { id, productId, brandId, name } = val
+      if ( brandId ) {
+        products[ brandId ] = products[ brandId ] || { name }
+      }
+      if ( productId ) {
+        products[ brandId ][ productId ] = products[ brandId ][ productId ] || { name }
+      }
+      if ( id ) {
+        products[ brandId ][ productId ][ id ] = val
+      }
+    } )
+
+    return Object.keys( products ).reduce( ( total, next ) => {
+      let o: any = {}
+      o.id = next
+      let brandData = products[ next ]
+      o.type = +!!( Object.keys( brandData ).length - 1 )
+
+      if ( o.type ) {
+        o.spu = Object.keys( brandData ).filter( v => v !== 'name' ).map( val => {
+          let spuData = brandData[ val ]
+          let spu: any = {}
+          spu.id = val
+          spu.type = +!!( Object.keys( spuData ).length - 1 )
+
+          if ( spu.type ) {
+            spu.sku = Object.keys( spuData ).filter( v => v !== 'name' ).map( v => {
+              let { id, name, specification, price, lcSkuCode, settlePrice, bottomPrice, platformPrice,number,salesPrice } = spuData[ v ]
+              return {
+                id,
+                price, lcSkuCode, settlePrice, bottomPrice, platformPrice,number:+number,salesPrice,specification,
+                name: name || specification
+              }
+            } )
+          } else {
+            spu.name = spuData.name
+          }
+          return spu
+        } )
+      } else {
+        o.name = brandData.name
+      }
+      total.push( o )
+      return total
+    }, [] )
+  }
+  formatRequestData () {
+    const promotion = this.promotion
+    let startDate = this.formatMyDate( promotion.startDate, 'yyyy-MM-dd' )
+
+    let isStartThree = promotion.startTime && promotion.startTime.split( ':' ).length === 3
+    let isEndThree = promotion.endTime && promotion.endTime.split( ':' ).length === 3
+    let fillTime = ( len ) => len ? '' : ':00'
+    let startTime = startDate + ' ' + ( promotion.startTime ? promotion.startTime + fillTime( isStartThree ) : '00:00:00' )
+    let endDate = this.formatMyDate( promotion.endDate, 'yyyy-MM-dd' )
+    let endTime = endDate + ' ' + ( promotion.endTime ? promotion.endTime + fillTime( isEndThree ) : '23:59:59' )
+    let type = promotion.ruleInfo.type || this.type
+    let o: any = {}
+    "title,priority,name".split( ',' ).forEach( ( v, i ) => {
+      o[ v ] = promotion[ v ]
+    } )
+    o.brandProducts = this.encodeProduct( promotion.brandProducts )
+
+    if ( type == 1 ) {
+      o.ruleInfo = {
+        type,
+        ruleInfo: promotion.ruleInfo
+      }
+    } else {
+      o.ruleInfo = {
+        type,
+        ...promotion.ruleInfo
+      }
+    }
+
+    // o.ruleInfo = JSON.stringify( o.ruleInfo )
+    if ( new Date( startTime.replace( /\s/, 'T' ) ) >= new Date( endTime.replace( /\s/, 'T' ) ) ) {
+      return this.$notify( {
+        type: 'error',
+        message: '请确保开始时间与结束时间填写正确！'
+      } )
+    }
+
+    o.starttime = startTime
+    o.endtime = endTime
+    o.type = type
+    let { discountId } = this.$route.query
+    if ( discountId ) {
+      o.discountId = +discountId
+    } else {
+      o.name += this.formatMyDate( new Date(), 'yyyy-MM-dd' )
+    }
+    return o
+  }
+}
+
+</script>
+<style lang="stylus" scoped>
+.box
+  margin-bottom 20px
+</style>

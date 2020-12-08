@@ -1,0 +1,218 @@
+<template>
+  <el-dialog title="发票更新" v-model="visible" :before-close="close" class="invoice-update">
+    <el-form ref="form" :model="form" label-width="120px" @submit.native.prevent>
+      <el-form-item label="开票方式:">
+        <el-radio-group v-model="form.invoiceKind" size="small" @change="handleInvoiceKind">
+          <el-radio :label="0">电子发票</el-radio>
+          <el-radio :label="1">纸质发票</el-radio>
+        </el-radio-group>
+      </el-form-item>
+      <el-form-item label="发票类型:">
+        <el-radio-group v-model="form.invoiceType" size="small">
+          <el-radio :label="0">增值税普通发票</el-radio>
+          <el-radio :label="1" v-if="form.invoiceKind">增值税专用发票</el-radio>
+        </el-radio-group>
+      </el-form-item>
+      <el-form-item label="企业税号:">
+        <el-input v-model="form.taxpayerId"></el-input>
+      </el-form-item>
+      <el-form-item label="发票抬头:">
+        <el-input v-model="form.invoiceTitle"></el-input>
+      </el-form-item>
+      <el-form-item label="注册地址:">
+        <el-cascader ref="address" :disabled="!areaAddressList" :options="areaAddressList" clearable v-model="selectedOptions" @change="handleChange">
+        </el-cascader>
+      </el-form-item>
+      <el-form-item label="详细地址:">
+        <el-input v-model="form.companyAddressDetail"></el-input>
+      </el-form-item>
+      <el-form-item label="联系方式:">
+        <el-input v-model="form.invoiceMobile"></el-input>
+      </el-form-item>
+      <el-form-item label="开户银行:">
+        <el-input v-model="form.bankDeposit"></el-input>
+      </el-form-item>
+      <el-form-item label="银行卡号:">
+        <el-input v-model="form.bankAccount"></el-input>
+      </el-form-item>
+      <el-form-item label="">
+        <el-button type="primary" @click="saveInvoice">确认</el-button>
+        <el-button @click="close">取消</el-button>
+      </el-form-item>
+    </el-form>
+  </el-dialog>
+</template>
+<script lang="ts">
+import Vue from 'vue'
+import { Component, Prop } from 'vue-property-decorator'
+import { State, Action } from 'vuex-class'
+import API from '../../../API'
+
+@Component( {
+  name: 'InvoiceUpdate'
+} )
+export default class InvoiceUpdate extends Vue {
+  @Prop()
+  value: boolean
+  @Prop()
+  invoice: any
+  @State( state => state.address.areaAddressList ) areaAddressList
+  visible = true
+  @Action( 'address/getAreaList' ) getAreaList
+  created () {
+    this.getAreaList()
+    this.visible = true
+    console.log( this.invoice)
+    if ( this.invoice ) {
+      Object.keys( this.invoice ).forEach( v => {
+        if ( this.form.hasOwnProperty( v ) ) {
+          this.form[ v ] = this.invoice[ v ]
+        }
+      } )
+      let { provinceId, countryId, cityId } = this.invoice
+      this.selectedOptions = [ provinceId, cityId, countryId ]
+    }
+  }
+  form = {
+    invoiceKind: 0,
+    invoiceType: 0,
+    taxpayerId: '',
+    companyAddressDetail: '',
+    companyAddress: '',
+    bankDeposit: '',
+    bankAccount: '',
+    provinceId: '',
+    countryId: '',
+    cityId: '',
+    invoiceTitle: '',
+    invoiceMobile: ''
+    // orderSn: ''
+  }
+  selectedOptions: any[] = []
+  close () {
+    this.visible = false
+    setTimeout( () => {
+      this.$emit( 'input', false )
+    }, 300 )
+  }
+  saveInvoice () {
+    // this.form.companyAddress = this.form.companyAddressDetail
+    let addressRef: any = this.$refs[ 'address' ]
+    let address = addressRef.currentLabels.join( '' )
+    let s = [ '北京市北京市', '天津市天津市', '上海市上海市', '重庆市重庆市' ]
+    s.forEach( v => {
+      if ( address.indexOf( v ) > -1 ) {
+        address = address.replace( v, '' )
+      }
+    } )
+    this.form.companyAddress = address + this.form.companyAddressDetail
+    if ( !this.validate() ) return
+    let params: any = {}
+    Object.keys( this.form ).forEach( key => {
+      let newValue = this.form[ key ]
+      let oldValue = this.invoice[ key ]
+      if ( newValue !== oldValue ) {
+        params[ key ] = newValue
+      }
+    } )
+    if ( !Object.keys( params ).length ) {
+      this.close()
+      return
+    }
+    params.id = this.invoice.id
+    this.close()
+    Object.assign( this.invoice, params )
+    this.$http(API.updateInvoiceBasicInfo,params).then(({data})=>{
+      console.log(data)
+      Object.assign( this.invoice, params )
+      this.$notify({
+        type:'success',
+        message:'发票修改成功！'
+      })
+    },()=>{
+        this.$notify({
+          type:'error',
+          message:'发票修改失败！'
+        })
+      })
+    // this.$emit( 'submit', params )
+  }
+  validate () {
+    let { invoiceType, taxpayerId, companyAddressDetail, invoiceMobile = '', companyAddress, bankDeposit, bankAccount, invoiceTitle } = this.form
+
+    let reg = /^((\d{6}[0-9A-Z]{9})|([0-9A-Za-z]{2}\d{6}[0-9A-Za-z]{10})|(\d{20})|(\d{17}(\d|X|x)\d{2}))$/
+
+    taxpayerId = taxpayerId.trim()
+    if ( !reg.test( taxpayerId ) ) {
+      this.$message( {
+        type: 'warning',
+        title: '提交失败',
+        message: '请填写正确的纳税人识别号!'
+      } )
+      return false
+    }
+    if ( !invoiceTitle ) {
+      this.$message( {
+        type: 'warning',
+        title: '提交失败',
+        message: '请输入正确的发票抬头!'
+      } )
+      return false
+    }
+
+    if ( invoiceType == 1 ) {
+      if ( !companyAddressDetail ) {
+        this.$message( {
+          type: 'warning',
+          title: '提交失败',
+          message: '申请增值税专用发票时，公司所在地不能为空!'
+        } )
+        return false
+      }
+      if ( !companyAddress ) {
+        this.$message( {
+          type: 'warning',
+          title: '提交失败',
+          message: '申请增值税专用发票时，公司详细地址不能为空!'
+        } )
+        return false
+      }
+
+      if ( !bankDeposit ) {
+        this.$message( {
+          type: 'warning',
+          title: '提交失败',
+          message: '申请增值税专用发票时，开户银行不能为空'
+        } )
+        return false
+      }
+      // let bankReg = /^((\d{6}[0-9A-Z]{9})|([0-9A-Za-z]{2}\d{6}[0-9A-Za-z]{10})|(\d{20})|(\d{17}(\d|X|x)\d{2}))$/
+      bankAccount = bankAccount.trim()
+      if ( !bankAccount ) {
+        this.$message( {
+          type: 'warning',
+          title: '提交失败',
+          message: '申请增值税专用发票时，银行账号不能为空！'
+        } )
+        return false
+      }
+    }
+    return true
+  }
+  handleChange ( v ) {
+    this.selectedOptions = v
+    this.form.provinceId = v[ 0 ]
+    this.form.cityId = v[ 1 ]
+    this.form.countryId = v[ 2 ]
+  }
+  handleInvoiceKind () {
+    this.form.invoiceType = 0
+  }
+
+}
+</script>
+<style lang="stylus" scoped>
+.el-form-item
+  margin-bottom 12px
+</style>
+

@@ -1,0 +1,236 @@
+<template>
+  <div id="quote-list">
+    <lc-title text="大客户报价">
+      <el-button class="pull-right" type="primary" @click="dialogVisible=true" v-if="$permissionValidate(571)">新建报价</el-button>
+    </lc-title>
+    <lc-condition :condition="condition" @submit="search" label-width="120px"></lc-condition>
+    <lc-table :config="config" :data="myData" :height="600" :page="page" @cur-change="curChange">
+      <template slot-scope="scope">
+        <template v-if="scope.con.prop == 'control'">
+          <el-button-group>
+            <template v-if="scope.row.status==1">
+              <el-button type="success" size="small" @click="auditQuote(scope.row,1)" v-if="$permissionValidate(572)">审核</el-button>
+              <el-button type="warning" size="small" @click="auditQuote(scope.row,0)" v-if="$permissionValidate(573)">拒绝</el-button>
+            </template>
+            <el-button type="primary" size="small" @click="viewItem(scope.row)" v-if="$permissionValidate(574)">查看</el-button>
+            <template v-if="scope.row.status!=0">
+              <el-button size="small" @click="exportItem(scope.row)" v-if="$permissionValidate(575)">导出</el-button>
+            </template>
+            <template v-if="scope.row.status==0 || scope.row.status==1">
+              <el-button type="error" size="small" @click="deleteQuoteConfirm(scope.row)" v-if="$permissionValidate(576)">删除</el-button>
+            </template>
+          </el-button-group>
+        </template>
+        <template v-else-if="scope.con.prop == 'auditTime' || scope.con.prop == 'createTime'">
+          {{formatDate(scope.row[scope.con.prop])}}
+        </template>
+        <template v-else-if="scope.con.prop == 'status'">
+          {{converData(scope.row[scope.con.prop],'status')}}
+        </template>
+        <template v-else>
+          {{scope.row[scope.con.prop]}}
+        </template>
+      </template>
+    </lc-table>
+    <add-new-quote v-if="dialogVisible" v-model="dialogVisible" @refresh="search"></add-new-quote>
+    <!-- <el-dialog title="新建集团报价" v-model="dialogVisible" v-if="$permissionValidate(571)">
+      <el-form label-width="100px">
+        <el-form-item label="集团名称">
+          <tenant-search @broadcast="broadCastTenant" :text="tenant&&tenant.name"></tenant-search>
+        </el-form-item>
+        <el-form-item label="报价文件">
+          <input-file-upload @change="fileChange">
+            <span style="fontSize:12px;">
+              <template v-if="!file">请选择文件</template>
+              <template v-else>{{file.name}}</template>
+            </span>
+          </input-file-upload>
+        </el-form-item>
+      </el-form>
+      <span slot="footer">
+        <el-button type="text" @click="closeDialog">取消</el-button>
+        <el-button type="primary" @click="uploadFile" :loading="uploadLoading">确认</el-button>
+      </span>
+    </el-dialog> -->
+  </div>
+</template>
+<script lang="ts">
+import { Component, Vue, Inject } from 'vue-property-decorator'
+import lcTitle from '../../components/title.vue'
+import lcCondition from '../../components/condition.vue'
+
+import addNewQuote from './components/addNewQuote.vue'
+import lcTable from '../../components/table/'
+import { quoteStatuses } from './const'
+import { matchArrItem } from '../../utils'
+import API from '../../API'
+
+@Component( {
+  name: 'quote-list',
+  components: {
+    lcTitle,
+    lcCondition,
+    lcTable,
+    addNewQuote
+    // lcTableConfig
+  }
+} )
+export default class QuoteList extends Vue {
+  activated () {
+    this.search()
+  }
+
+  @Inject() formatMyDate
+  formatDate ( date ) {
+    if ( !date ) {
+      return '--'
+    }
+    return this.formatMyDate( new Date( date.time ) )
+  }
+  // currentQuote: any = null
+  // auditVisible: boolean = false
+  // auditItemStatus: number = null
+
+  // remark: string = ''
+
+  auditQuote ( item, status ) {
+    // this.auditItemStatus = status
+    // this.currentQuote = item
+    // this.auditVisible = true
+    if ( status ) {
+      this.$confirm( '此操作将通过此报价单申请，是否继续', '提示', {
+        confirmButtonText: '确定',
+        cancelButtonText: '取消',
+        type: 'warning'
+      } ).then( () => {
+        this.submitQuoteAudit( item, 2 )
+      } )
+    } else {
+      this.$prompt( '此操作将拒绝此报价单申请，请输入拒绝理由', '提示', {
+        confirmButtonText: '确定',
+        cancelButtonText: '取消',
+        inputPattern: /^[\s\S]*.*[^\s][\s\S]*$/,
+        inputErrorMessage: '拒绝理由不能为空'
+      } ).then( ( { value } ) => {
+        this.submitQuoteAudit( item, 3, value )
+      } ).catch( () => {
+
+      } )
+    }
+  }
+  deleteQuoteConfirm ( item ) {
+    this.$confirm( '此操作将删除此报价单，是否继续', '提示', {
+      confirmButtonText: '确定',
+      cancelButtonText: '取消',
+      type: 'warning'
+    } ).then( () => {
+      this.deleteQuote( item )
+    } )
+  }
+  deleteQuote ( item ) {
+    this.$http( API.deleteQuote, {
+      id: item.id,
+      broadcast: true
+    } ).then( () => {
+      let index = this.myData.indexOf( item )
+      if ( index > -1 ) {
+        this.myData.splice( index, 1 )
+      }
+    } )
+  }
+  // closeAuditDialog () {
+  //   this.auditItemStatus = null
+  //   this.currentQuote = null
+  //   this.auditVisible = false
+  // }
+  submitQuoteAudit ( item, status, remark = undefined ) {
+    // if ( !this.auditItemStatus && !this.remark ) {
+    //   return this.$notify( {
+    //     type: 'error',
+    //     message: '请输入审批拒绝理由！'
+    //   } )
+    // }
+    let { id } = item
+    this.$http( API.updateQuoteStatus, {
+      id,
+      status,
+      remark,
+      broadcast: true
+    } ).then( () => {
+      Object.assign( item, { status, remark } )
+      // this.closeAuditDialog()
+    } )
+  }
+  converData ( value, prop ) {
+    let arr = []
+    switch ( prop ) {
+      case 'status':
+        arr = quoteStatuses
+        break
+    }
+    return matchArrItem( value, arr, 'id' ).name
+  }
+  condition = [
+    { value: undefined, key: 'tenantId', label: '集团名称', type: 'tenantSearch' },
+    { value: undefined, key: 'tenderer', label: '报价人', type: 'text' },
+    { value: undefined, key: 'status', label: '状态', type: 'radio', options: quoteStatuses }
+  ]
+  config: any[] = [
+    { prop: 'tenantName', label: '集团名称', width: '300' },
+    { prop: 'tenderer', label: '报价人', width: '150' },
+    { prop: 'auditUser', label: '审批人', width: '' },
+    { prop: 'status', label: '状态', width: '' },
+    { prop: 'skuNum', label: 'SKU数量', width: '150' },
+    { prop: 'createTime', label: '申请日期', width: '200' },
+    { prop: 'auditTime', label: '审核日期', width: '200' },
+    { prop: 'remark', label: '拒绝理由', width: '150' },
+    { prop: 'control', label: '操作', width: '200', fixed: 'right' }
+  ]
+  myData: any[] = []
+  page = {
+    cur: 1,
+    num: 20,
+    total: 0
+  }
+
+  curChange ( cur ) {
+    this.search( cur )
+  }
+  dialogVisible: boolean = false
+  viewItem ( { id, status, tenantName, tenantId } ) {
+    this.$router.push( `/vip/quoteDetail/${id}?status=${status}&tenantName=${tenantName}&tenantId=${tenantId}` )
+  }
+  computeGetDataOption () {
+    let o: any = {}
+    let { cur, num } = this.page
+    o.num = num
+    o.start = ( cur - 1 ) * num
+    this.condition.forEach( val => {
+      let { value, key, type } = val
+      if ( type == 'tenantSearch' ) {
+        o[ key ] = value && value.id
+      } else {
+        o[ key ] = value
+      }
+    } )
+    return o
+  }
+  search ( cur = 1 ) {
+    this.$permissionValidateWithNotify( 570 )
+    this.page.cur = cur
+    this.$http( API.getQuoteList, this.computeGetDataOption() ).then( ( { data } ) => {
+      let { list = [], total = 0 } = data.data || {}
+      this.myData = list
+      this.page.total = total
+    }, () => {
+      this.myData = []
+      this.page.total = 0
+    } )
+  }
+  exportItem ( { id } ) {
+    this.$submit( API.exportExcelFile, { id } )
+  }
+
+}
+</script>
+

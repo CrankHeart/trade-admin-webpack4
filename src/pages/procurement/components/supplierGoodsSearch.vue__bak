@@ -1,0 +1,92 @@
+<template>
+  <div class="supplier-goods-search">
+    <el-form>
+      <el-form-item label="按品牌筛选：">
+        <el-select clearable v-model="form.brandId" placeholder="选择品牌" filterable>
+          <el-option v-for="options in brandList" :label="options.name" :value="options.id" :key="options.id">
+          </el-option>
+        </el-select>
+        <el-button type="primary" @click="searchByBrandid">搜索</el-button>
+      </el-form-item>
+      <el-form-item label="按LC编码筛选：">
+        <el-input v-model="form.lcSkuCode" placeholder="请选择sku lcCode">
+        </el-input>
+        <el-button type="primary" @click="searchByLcSkucode">搜索</el-button>
+      </el-form-item>
+    </el-form>
+  </div>
+</template>
+<script lang="ts">
+import Vue from "vue";
+import { Component, Prop } from "vue-property-decorator";
+import { Getter, State, Mutation, Action } from "vuex-class";
+@Component({
+  name: "supplier-goods-search"
+})
+export default class supplierInfo extends Vue {
+  @Action("brand/getAllBrands") getAllBrands;
+  @State(state => state.brand.brandList)
+  brandList;
+  // data
+  form = {
+    brandId: "",
+    lcSkuCode: ""
+  };
+  // created
+  created() {
+    this.getAllBrands();
+  }
+  // methods
+  searchByBrandid() {
+    this.form.lcSkuCode = "";
+    let { brandId, lcSkuCode } = this.form;
+    if (this.form.brandId !== "") {
+      this.$emit("getSupplierSearchParams", {
+        brandId: brandId,
+        lcSkuCode: lcSkuCode,
+        type: "brandId"
+      });
+    } else {
+      this.$notify({
+        type: "warning",
+        message: "请选择品牌"
+      });
+    }
+  }
+  searchByLcSkucode() {
+    this.form.brandId = "";
+    let { brandId, lcSkuCode } = this.form;
+    if (this.form.lcSkuCode) {
+      this.$emit("getSupplierSearchParams", {
+        brandId: brandId,
+        lcSkuCode: lcSkuCode,
+        type: "skuCode"
+      });
+    } else {
+      this.$notify({
+        type: "warning",
+        message: "请输入sku编码"
+      });
+    }
+  }
+}
+</script>
+<style lang="stylus" scoped>
+.supplier-goods-search {
+  .el-form-item {
+    display: flex;
+    justify-content: flex-start;
+    align-item: center;
+  }
+
+  .el-input {
+    width: 200px;
+  }
+
+  .el-select {
+    width: 200px;
+    margin-left: 15px;
+  }
+}
+</style>
+

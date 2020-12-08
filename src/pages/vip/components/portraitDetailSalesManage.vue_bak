@@ -1,0 +1,97 @@
+<template>
+  <div class="user-portrait-sales-manage">
+    <slot></slot>
+    <el-form label-width="130px">
+      <el-form-item v-for="con in condition" :key="con.prop" :label="`${con.label}：`">
+        <template v-if="con.prop=='consumablesPerson'">
+          <template v-if="isEdit || isConsumablesPersonEdit">
+            <consumables-person-search v-model="item.consumablesPerson" @change="consumablesPersonChange" size="small"></consumables-person-search>
+          </template>
+          <template v-else>
+            {{consumablesPersonAndEmail}}
+          </template>
+        </template>
+        <template v-else-if="con.prop=='salesDepartments'">
+          <template v-if="isEdit">
+            <el-select v-model="item.salesDepartments" size="small">
+              <el-option v-for="opt in option.salesDepartmentss" :key="opt.id" :label="opt.name" :value="opt.id"></el-option>
+            </el-select>
+          </template>
+          <template v-else>
+            {{convertData(item[con.prop],con.prop)}}
+          </template>
+        </template>
+        <template v-else-if="!con.type">
+          {{ item[con.prop] }}
+        </template>
+        <template v-else>
+          <template v-if="isEdit">
+            <el-input v-model="item[con.prop]" size="small" :type="con.type"></el-input>
+          </template>
+          <template v-else>
+            {{item[con.prop]}}
+          </template>
+        </template>
+      </el-form-item>
+    </el-form>
+  </div>
+</template>
+<script lang="ts">
+
+import Vue from 'vue'
+import { Component, Prop } from 'vue-property-decorator'
+import consumablesPersonSearch from '../../../components/consumablesPersonSearch.vue'
+import portraitMixins from './portraitMixins'
+
+@Component( {
+  name: 'PortraitDetailSalesManage',
+  mixins: [ portraitMixins ],
+  components: {
+    consumablesPersonSearch
+  }
+} )
+export default class PortraitDetailSalesManage extends Vue {
+  @Prop( { default: () => ( {} ) } )
+  item: any
+  @Prop()
+  isConsumablesPersonEdit: boolean
+  @Prop()
+  isEdit: boolean
+  condition = [
+    { prop: 'purContactName', label: '采购联系人' },
+    { prop: 'purContactMobile', label: '联系方式' },
+    { prop: 'firstTradeDeveloper', label: '交易首单开发', type: 'text' },
+    { prop: 'consumablesPerson', label: '当前耗材负责人', type: 'consumablesPersonSearch' },
+    { prop: 'custResponsiblePerson', label: '客服运营负责人', type: 'text' },
+    { prop: 'salesDepartments', label: '销售部门', type: 'select' }
+  ]
+
+  get consumablesPersonAndEmail () {
+    let { consumablesPerson, email } = this.item
+    if ( consumablesPerson && email ) {
+      return consumablesPerson + ':' + email
+    } else if ( consumablesPerson ) {
+      return consumablesPerson
+    } else {
+      return email
+    }
+  }
+  consumablesPersonChange(v){
+    let [consumablesPerson, email] = v.split(':')
+    this.item.consumablesPerson = consumablesPerson
+    this.item.email =email
+  }
+}
+</script>
+<style lang="stylus" scoped>
+.user-portrait-sales-manage
+  >.el-button-group
+    position relative
+    top -40px
+    height 0
+  .el-form-item
+    padding 2px 0
+    margin 0
+    + .el-form-item
+      border-top 1px solid #eee
+</style>

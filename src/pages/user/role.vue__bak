@@ -1,0 +1,91 @@
+<template>
+  <div id="user-role">
+    <lc-title text="角色管理"></lc-title>
+    <el-row :gutter="20">
+      <el-col :span="6" :xs="24">
+        <role-side @cur-role-change="curRoleChange" :cur-role="curRole" :height="boxHeight"></role-side>
+      </el-col>
+      <el-col :span="18" :xs="24">
+        <role-detail :cur-role="curRole" :height="boxHeight"></role-detail>
+      </el-col>
+    </el-row>
+  </div>
+</template>
+<script lang="ts">
+  import Vue from "vue"
+  import { Component, Inject } from "vue-property-decorator"
+  import lcTitle from "../../components/title.vue"
+  import API from "../../API"
+  import roleDetail from "./components/roleDetail2.vue"
+  import roleSide from "./components/roleSide2.vue"
+  import { State } from 'vuex-class'
+  @Component({
+    name: "role",
+    components: {
+      lcTitle,
+      roleDetail,
+      roleSide
+    }
+  })
+  export default class Role extends Vue {
+    curRole: any = {}
+    @State('clientHeight') clientHeight
+    get boxHeight() {
+      return this.clientHeight - 240 + "px"
+    }
+    deactivated() {
+      this.curRole = {}
+    }
+    curRoleChange(cur) {
+      this.curRole = cur
+    }
+  }
+</script>
+<style lang="stylus" >
+#user-role {
+  .box {
+  }
+
+  // &::-webkit-scrollbar {width: 6px;height:6px;}
+  // &::-webkit-scrollbar-track-piece{background-color: #eee;margin: -2px;}
+  // &::-webkit-scrollbar-thumb{background: #aaa;min-height: 150px;min-width: 150px;border-radius: 10px;}
+  // &::-webkit-scrollbar-thumb:vertical:hover{background: #555555}
+  // &::-webkit-scrollbar-thumb:horizontal:hover{background: #555555}
+  .role-list {
+    li {
+      line-height: 28px;
+      cursor: pointer;
+      height: 28px;
+      margin: 5px 0;
+      overflow: hidden;
+      border-top: 1px dotted rgba(0, 0, 0, 0);
+      border-bottom: 1px dotted rgba(0, 0, 0, 0);
+      transition: all 0.5s;
+
+      &.is-active, &:hover {
+        border-top-color: rgba(0, 0, 0, 0.2);
+        border-bottom-color: rgba(0, 0, 0, 0.2);
+        background: #efefef;
+        text-indent: 5px;
+
+        .el-button {
+          opacity: 1;
+        }
+      }
+
+      .el-button {
+        margin-top: 3px;
+        opacity: 0;
+        transition: all 0.5s;
+      }
+    }
+  }
+
+  .el-tabs + p {
+    top: -45px;
+    position: relative;
+    margin-bottom: -23px;
+  }
+}
+</style>
+

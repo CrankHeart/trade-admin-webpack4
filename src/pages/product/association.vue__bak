@@ -1,0 +1,298 @@
+<template>
+  <div id="product-association">
+    <lc-title text="协议商品"></lc-title>
+    <el-row>
+      <el-col :lg="10" :xs="20" :sm="11">
+        <el-form @submit.native.prevent label-width="110px">
+          <el-form-item label="">
+            <lc-tenant-search @broadcast="broadCastTenant" :has-submit-btn="true" :two-way="true" :label-width="115"></lc-tenant-search>
+          </el-form-item>
+          <el-form-item label="">
+            <el-button @click="searchByLcCode">查询</el-button>
+            <el-select v-model="lcCodeType">
+              <el-option label="Spu" value="lcSpuCode"></el-option>
+              <el-option label="Sku" value="lcSkuCode"></el-option>
+            </el-select>
+            <el-input v-model="code" placeholder="请输入lc编码" icon="circle-close" :on-icon-click="clearLcCode"></el-input>
+          </el-form-item>
+        </el-form>
+      </el-col>
+      <el-col :lg="{span:12,offset:2}" :xs="24" :sm="{span:9,offset:4}" v-if="tenant.id">
+        <el-card>
+          当前企业：{{tenant.name}}<br /> {{tenant.id}}
+        </el-card>
+      </el-col>
+      <el-button type="primary" v-if="tenant.id" class="pull-right" style="margin-top:10px" @click="exportAgreeProduct">导出商品</el-button>
+    </el-row>
+
+    <hr />
+
+    <lc-table :config="config" :data="myData" @cur-change="curChange" :page="page">
+      <template slot-scope="scope">
+        <!-- <template >
+          <el-input v-model="scope.row[scope.con.prop]"/>
+        </template> -->
+        <template v-if="(prop=scope.con.prop,prop=='lcSpuCode' ||prop=='lcSkuCode'||prop=='agreePrice')">
+          <el-input v-model.trim="scope.row[scope.con.prop]" size="small" :disabled="scope.con.prop!=='agreePrice'&&!scope.row.isAdd" @change="dataChange(scope.con.prop,$event)" />
+        </template>
+        <template v-else-if="prop=='control'">
+          <template v-if="!scope.row.isAdd">
+            <!-- {{scope.row.agreePrice}}-{{scope.row.bakAgreePrice}} -->
+            <el-button :type="`${+scope.row.agreePrice!==+scope.row.bakAgreePrice?'primary':''}`" v-if="$permissionValidate([498,499])" size="small" @click="addAgreeProduct(scope.row)">保存</el-button>
+            <el-button size="small" @click="delAgreeProduct(scope.row)" v-if="$permissionValidate(500)"> 删除</el-button>
+          </template>
+        </template>
+        <template v-else>
+          {{scope.row[scope.con.prop]}}
+        </template>
+      </template>
+    </lc-table>
+  </div>
+</template>
+<script lang="ts">
+import Vue from "vue"
+import { Component, Prop, Inject } from "vue-property-decorator"
+import lcTenantSearch from "../../components/tenantSearch/index.vue"
+import lcTitle from "../../components/title.vue"
+// import lcTable from "./components/associationItems.vue"
+import lcTable from '../../components/table'
+import API from "../../API"
+interface Tenant {
+  name: string
+  id: string
+  [ propName: string ]: any
+}
+@Component( {
+  name: "product-association",
+  components: {
+    lcTenantSearch,
+    lcTitle,
+    lcTable
+  }
+} )
+export default class Productassociation extends Vue {
+  lcCodeType: string = ""
+  code: string = ""
+  get lcCode () {
+    return {
+      [ this.lcCodeType ]: this.code || undefined
+    }
+    // return this.code
+  }
+  tenant: Tenant = {
+    name: "",
+    id: ""
+  }
+  get config () {
+    return [
+      { prop: "lcSpuCode", label: "lc编码", width: '160px' },
+      { prop: "lcSkuCode", label: "lcSku编码", width: '160px' },
+      { prop: "name", label: "商品名称" },
+      { prop: "specification", label: "规格" },
+      { prop: "salesPrice", label: "售价", width: '100px' },
+      { prop: "agreePrice", label: "协议价", width: '100px' },
+      { prop: "control", label: "操作" }
+    ]
+  }
+  page = {
+    cur: 1,
+    num: 10,
+    total: 0
+  }
+  data = []
+
+  get tenantType (): number {
+    return this.tenant.roundingType || 0
+  }
+  curChange ( cur ) {
+    this.page.cur = cur
+    this.getAgreeProduct()
+  }
+  broadCastTenant ( o ) {
+    this.tenant = o
+    this.page.cur = 1
+    this.searchByTenant()
+  }
+  clearLcCode () {
+    this.code = ""
+  }
+
+  searchByTenant () {
+    this.clearLcCode()
+    this.getAgreeProduct()
+  }
+  searchByLcCode () {
+    this.page.cur = 1
+    this.getAgreeProduct()
+  }
+  exportAgreeProduct () {
+    this.$submit( API.exportAgreeProduct, { tenantId: this.tenant.id }, true )
+  }
+  getAgreeProduct () {
+    this.$permissionValidateWithNotify( 497 )
+    let tenantId = this.tenant.id
+    let reject = () => {
+      this.page.total = 0
+      this.data = []
+    }
+    if ( !tenantId ) {
+      reject()
+      return
+    }
+    var o: any = {
+      tenantId,
+      start: ( this.page.cur - 1 ) * this.page.num,
+      num: this.page.num,
+      ...this.lcCode
+    }
+
+    this.$http( API.getAgreeProduct, o ).then(
+      ( { data } ) => {
+        this.page.total = data.total
+        this.data = data.list.map( v => {
+          v.bakAgreePrice = v.agreePrice
+          let name = v.name.split( '-' )
+          v.name = name[ 0 ]
+          v.specification = name[ 1 ]
+          return v
+        } )
+      },
+      reject
+    )
+  }
+  get myData () {
+    return this.data.concat( {
+      isAdd: true,
+      lcSpuCode: "",
+      lcSkuCode: ""
+    } )
+  }
+
+  dataChange ( prop, data ) {
+    if ( prop == 'lcSpuCode' || prop == 'lcSkuCode' ) {
+      this.getSkuOfAgreeProduct( {
+        [ prop ]: data
+      } )
+    }
+  }
+  delAgreeProduct ( item ) {
+    this.$http( API.deleteAgreeProduct, {
+      tenantId: this.tenant.id,
+      skuId: item.skuId
+    } ).then( ( { data } ) => {
+      this.data = this.data.filter( val => val.lcSkuCode !== item.lcSkuCode )
+      this.$notify( {
+        type: "success",
+        message: item.lcSkuCode + "删除成功！"
+      } )
+    } )
+  }
+
+  addAgreeProduct ( item ) {
+
+    let { agreePrice, skuId, bakAgreePrice, bottomPrice } = item
+
+    // agreePrice = agreePrice.trim()
+    // bakAgreePrice = bakAgreePrice
+    // lcSkuCode = lcSkuCode.trim()
+
+    if ( +bakAgreePrice == +agreePrice ) {
+      return
+    }
+    // 20180920 修改 去除协议不能低于综合成本价限制
+    // if ( +bottomPrice > +agreePrice ) {
+    //   this.$notify( {
+    //     type: 'error',
+    //     message: `协议价不能低于综合成本价，此商品综合成本价为[${bottomPrice}]`
+    //   } )
+    //   return
+    // }
+
+    if ( isNaN( +agreePrice ) + agreePrice < 0 ) {
+      return this.$notify( {
+        type: 'error',
+        message: '请输入有效的协议价'
+      } )
+    }
+
+    this.$http( API.addAgreeProduct, {
+      tenantId: this.tenant.id,
+      skuId,
+      agreePrice: ( +agreePrice ),
+      broadcast: true
+    } ).then( ( { data } ) => {
+      //修改
+      this.$set( item, 'bakAgreePrice', item.agreePrice )
+      this.addAgreeProductCallBack( item )
+    } )
+  }
+  addAgreeProductCallBack ( item ) {
+    this.data.forEach( val => {
+      if ( val.lcSkuCode == item.lcSkuCode ) {
+        val.agreePrice = item.agreePrice
+        val.bakAgreePrice = item.bakAgreePrice
+      }
+    } )
+  }
+
+  getSkuOfAgreeProduct ( item ) {
+    this.$permissionValidateWithNotify( 663 )
+    this.$http( API.getSkuOfAgreeProduct, {
+      ...item,
+      tenantId: this.tenant.id
+    } ).then(
+      ( { data } ) => {
+        let list = data.data
+        if ( !list.length ) {
+          return this.$notify( {
+            type: 'warning',
+            message: '无可售商品！'
+          } )
+        }
+        let listKeys = list.map( v => v.id )
+        let oldList = this.data.filter( val => listKeys.indexOf( val.skuId ) > -1 )
+        let listObj = oldList.reduce( ( total, next ) => {
+          total[ next.skuId ] = next
+          return total
+        }, {} )
+
+        this.data = this.data.filter( val => listKeys.indexOf( val.skuId ) < 0 ).concat( ...list.map( v => ( {
+          ...v,
+          skuId: v.id,
+          bakAgreePrice: listObj[ v.id ] && listObj[ v.id ].bakAgreePrice
+        } ) ) )
+      },
+      ( { data } ) => {
+        item.lcSpuCode = ""
+        item.lcSkuCode = ""
+        if ( data.msg ) {
+          this.$notify( {
+            type: "error",
+            message: data.msg
+          } )
+        }
+      }
+    )
+  }
+
+}
+</script>
+<style lang="stylus">
+#product-association 
+  .tenant-search, .el-input 
+    display inline-block
+    width 100%
+  .el-form 
+    .el-button 
+      float right
+      margin-right -65px
+  
+</style>
+<style lang="stylus" scoped>
+.el-select
+  width 105px
+  position absolute
+  left -110px
+</style>
+
+

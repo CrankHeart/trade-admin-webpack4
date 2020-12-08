@@ -1,0 +1,162 @@
+<template>
+  <div id="supplier-list">
+    <lc-title text="供应商列表"></lc-title>
+    <lc-condition :condition="condition" @submit="search" label-width="100px"></lc-condition>
+    <lc-table :config="config" :data="myData" @cur-change="curChange" :page="page" :key="config.length">
+      <template slot-scope="scope">
+        <template v-if="scope.con.prop==='supplierStatus' ">
+          {{formatStatus(scope.row.supplierStatus)}}
+        </template>
+        <template v-else-if="scope.con.prop==='control' ">
+          <div class="control">
+            <el-button type="info" @click="control('edit',scope.row)" size="small">编辑</el-button>
+            <el-button type="danger" @click="control('delete',scope.row)" size="small">删除</el-button>
+          </div>
+        </template>
+        <template v-else>
+          {{scope.row[scope.con.prop]}}
+        </template>
+      </template>
+    </lc-table>
+  </div>
+</template>
+
+<script lang="ts">
+import Vue from 'vue'
+import { Component, Inject, Watch } from 'vue-property-decorator'
+import API from '../../API'
+import lcTitle from '../../components/title.vue'
+import lcCondition from '../../components/condition.vue'
+import lcTable from '../../components/table/index'
+import { supplierStatus } from './const/index'
+import { State, Action } from "vuex-class"
+
+@Component( {
+  name: 'supplier-list',
+  components: {
+    lcTitle,
+    lcCondition,
+    lcTable
+  }
+} )
+export default class SupplierList extends Vue {
+  @Action( 'supplier/getPersonIncharge' ) getPersonIncharge
+  @Action( 'supplier/getAllSuppliers' ) getAllSuppliers
+  @State( state => state.supplier.personInCharge ) personInCharge
+  @State( state => state.supplier.supplierList ) supplierList
+
+  condition = [
+    { value: '', key: 'supplierName', label: '供应商名称', type: 'select', options: [] },
+    { value: '', key: 'contactName', label: '联系人姓名', type: 'text' },
+    { value: '', key: 'personInCharge', label: '领健负责人', type: 'select', options: [] },
+    { value: '', key: 'supplierStatus', label: '状态', type: 'select', options: supplierStatus }
+  ]
+
+  config = [
+    { prop: 'supplierName', label: '供应商名称' },
+    { prop: 'contactName', label: '联系人' },
+    { prop: 'personInCharge', label: '领健负责人' },
+    { prop: 'settlementAccounts', label: '结算账户' },
+    { prop: 'supplierStatus', label: '状态' },
+    { prop: 'control', label: '操作', width: "150px" },
+  ]
+  @Watch( 'supplierList' )
+  supplierListWatcher () {
+    ( this.condition[ 0 ] as any ).options = this.supplierList.map( ( { name } ) => ( {
+      id: name,
+      name
+    } ) )
+  }
+  created () {
+    this.getPersonIncharge().then( res => {
+      let cond: any = this.condition[ 2 ]
+      cond.options = this.personInCharge
+    } )
+  }
+  activated () {
+    this.getAllSuppliers()
+    this.search()
+  }
+
+  formatStatus ( status ) {
+    let state = supplierStatus.filter( v => v.id === status )[ 0 ]
+    return state && state.name
+  }
+
+  formatOption () {
+    let o: any = {}
+    this.condition.forEach( v => {
+      if ( v.value !== '' ) {
+        if ( v.key == 'personInCharge' ) {
+          let options = 'options'
+          let option = v[ options ].filter( val => {
+            return val.id == v.value
+          } )
+          o[ v.key ] = ( option[ 0 ] || {} ).name
+        } else {
+          o[ v.key ] = v.value
+        }
+      }
+    } )
+
+    o.num = this.page.num
+    o.start = ( this.page.cur - 1 ) * o.num
+
+    return o
+  }
+
+  myData: any[] = []
+
+  page = {
+    cur: 1,
+    total: 0,
+    num: 10
+  }
+
+  search () {
+    this.$http( API.getSupplierInfos, this.formatOption() ).then( ( { data } ) => {
+      let d = data.data || {}
+      this.myData = d.list
+      this.page.total = d.total
+    } )
+  }
+  curChange ( v ) {
+    this.page.cur = v
+    this.search()
+  }
+  control ( type: 'edit' | 'delete', item ) {
+    if ( type == 'edit' ) {
+      this.$router.push( `/procurement/editSupplier/${item.id}` )
+    } else {
+      this.delPurchase( item )
+    }
+  }
+  delPurchase ( item ) {
+    this.$confirm( '是否确定删除?', '提示', {
+      confirmButtonText: '确定',
+      cancelButtonText: '取消',
+      type: 'warning',
+      center: true,
+      closeOnClickModal: false
+    } ).then( () => {
+      this.$http( API.delSupplierInfo, { id: item.id } ).then( res => {
+        this.$message( {
+          message: '删除成功',
+          type: 'success'
+        } )
+        let i = this.myData.indexOf( item )
+        this.myData.splice( i, 1 )
+        this.page.total--
+        this.getAllSuppliers( true )
+      } )
+    } )
+  }
+}
+
+</script>
+
+<style lang="stylus" scoped>
+.control
+  button:nth-child(2n-1)
+    margin-left 0
+</style>

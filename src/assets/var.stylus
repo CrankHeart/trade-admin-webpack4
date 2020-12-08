@@ -1,0 +1,15 @@
+ligntBorderColor = #ccc
+redColor = red
+pramary = #20a0ff
+white = #fff
+.pramary-bg
+  background pramary
+  color white
+.pramary
+  color pramary
+.white
+  color white
+.error, .danger
+  color redColor
+.pointer
+  cursor pointer

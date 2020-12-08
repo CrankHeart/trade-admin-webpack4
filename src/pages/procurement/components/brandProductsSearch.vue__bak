@@ -1,0 +1,178 @@
+<template>
+  <div class="procurement-replenishment__brandsearch">
+    <el-row class="promotion-brands" :gutter="20">
+      <el-col :span="4">
+        <h5>已选品牌
+          <fast-search @fast-search="fastSearchBrand" :basic-list="brandList" prop-name="name" key="brand"></fast-search>
+        </h5>
+        <div class="box brands">
+          <ul>
+            <li v-for="brand in filterBrand" :key="brand.id" :class="{'is-active':curBrand&&curBrand.id==brand.id}" @click="getSpu(brand)">
+              {{brand.name.split(/\//)[0]}}
+            </li>
+          </ul>
+        </div>
+      </el-col>
+      <el-col :span="6">
+        <h5>　SPU商品
+          <fast-search v-if="curBrand" @fast-search="fastSearchProduct" :basic-list="waitingProducts" key="product" prop-name="productName"></fast-search>
+          <el-pagination small layout="prev, pager, next" :page-size="spuPage.num" :current-page="spuPage.cur" @current-change="spuCurChange" :total="spuPage.total" class="pull-right"></el-pagination>
+        </h5>
+        <div class="box products">
+          <ul>
+            <li v-for="product in filterSpu" :key="product.productId" :class="{'is-active':curSpu&&curSpu.productId==product.productId}" @click="getSku(product)">
+              {{product.productName}}
+            </li>
+          </ul>
+        </div>
+      </el-col>
+      <el-col :span="14">
+        <h5>SKU商品
+          <el-pagination small layout="total,prev, pager, next" :current-page="skuPage.cur" @current-change="skuCurChange" :total="skuPage.total" class="pull-right"></el-pagination>
+        </h5>
+        <search-products-list @cur-change="skuCurChange" :height="490" :sku="skuList" :page="skuPage" :has-page="false"></search-products-list>
+      </el-col>
+    </el-row>
+  </div>
+</template>
+<script lang="ts">
+  import Vue from 'vue'
+  import { Component, Watch } from 'vue-property-decorator'
+  import { Getter, State, Mutation, Action } from 'vuex-class'
+  import lcTable from '../../../components/table/index'
+  import API from "../../../API"
+  import fastSearch from '../../../components/fastSearch.vue'
+  import searchProductsList from './searchProductsList.vue'
+  @Component({
+    name: 'procurement-replenishment-brandsearch',
+    components: {
+      fastSearch,
+      searchProductsList
+    }
+  })
+  export default class ProcurementReplenishmentBrandSearch extends Vue {
+    @Action('brand/getAllBrands') getAllBrands
+    @State(state => state.procurement.lcCodeList) lcCodeList
+    @State(state => state.procurement.purchaseListObj) purchaseListObj
+    @State(state => state.brand.brandList) brandList
+    get filterBrand() {
+      let searchBrandResult = this.searchBrandResult
+
+      return searchBrandResult.length ? searchBrandResult : this.brandList
+    }
+    get filterSpu() {
+      let curBrand = this.curBrand || {}
+      let searchProductResult = this.searchProductResult
+      let list = (searchProductResult.length ? searchProductResult : curBrand.products) || []
+      this.spuPage.total = list.length
+      let num = this.spuPage.num
+      let start = (this.spuPage.cur - 1) * num
+      return list.slice(start, start+num)
+    }
+    created() {
+      this.getAllBrands()
+    }
+    curBrand: any = null
+    curSpu: any = null
+    get skuList() {
+      let curSpu = this.curSpu || {}
+      let sku = curSpu.sku || []
+      let num = this.skuPage.num
+      let start = (this.skuPage.cur - 1) * num
+      sku = sku.slice(start, start+num)
+      sku.forEach(v => {
+        v.isLock = this.lcCodeList.some(val => val.lcSkuCode === v.lcSkuCode)
+      })
+      return sku
+    }
+    spuPage = {
+      cur: 1,
+      total: 0,
+      num: 20
+    }
+    sku = []
+    get waitingProducts() {
+      return this.curBrand && this.curBrand.products || []
+    }
+    skuCurChange(v) {
+      this.skuPage.cur = v
+    }
+    searchBrandResult: any[] = []
+    fastSearchBrand(v) {
+      this.searchBrandResult = v
+    }
+    searchProductResult: any[] = []
+    fastSearchProduct(v) {
+      this.searchProductResult = v
+    }
+    getSpu(brand) {
+      this.curBrand = brand
+      this.spuPage.total = 0
+      if (brand.products) return
+      this.$http(API.getProductByBrandId, { brandId: brand.id }).then(({ data }) => {
+        let productList = data.productList
+        this.$set(brand, 'products', productList)
+        this.spuPage.cur = 1
+      }, () => {
+        this.$set(brand, 'products', [])
+        this.spuPage.cur = 1
+      })
+    }
+    clearSkuList(item) {
+      this.$set(item, 'sku', [])
+      this.skuPage.cur = 1
+      this.skuPage.total = 0
+    }
+    getSku(item) {
+      this.curSpu = item
+      if (item.sku) return
+      this.clearSkuList(item)
+      this.$http(API.getSkuOfAgreeProduct, { lcCode: item.lcCode }).then(({ data }) => {
+        let sku = data.sku || []
+        sku.forEach(v => {
+          v.spu = data.spu
+          v.checked = !!this.purchaseListObj[v.lcSkuCode]
+          v.supplyNum = v.checked && this.purchaseListObj[v.lcSkuCode].supplyNum || 0
+          v.isLock = false
+        })
+        this.$set(item, 'sku', sku)
+        this.skuPage.cur = 1
+        this.skuPage.total = sku.length
+      }, () => {
+        this.clearSkuList(item)
+      })
+    }
+    skuPage = {
+      num: 10,
+      cur: 1,
+      total: 0
+    }
+
+    spuCurChange(v) {
+      this.spuPage.cur = v
+    }
+  }
+</script>
+<style lang="stylus" scoped>
+h5
+  line-height 50px
+  height 50px
+  overflow hidden
+  .el-pagination
+    margin-top 10px!important
+.box
+  max-height 500px
+  li
+    padding 5px
+    border-bottom 1px solid #efefef
+    font-size 13px
+    cursor pointer
+    &:hover
+    &.is-active
+      background #20a0ff
+      color #fff  
+</style>
+
+
+
+

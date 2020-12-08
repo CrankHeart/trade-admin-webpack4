@@ -1,0 +1,158 @@
+<template>
+  <div class="data-product-daily box">
+    <h3 class="relative">
+      <span :class="{'is-active':dataType=='daily'}" @click="dataTypeChange('daily')">每日销量</span> /
+      <span :class="{'is-active':dataType=='monthly'}" @click="dataTypeChange('monthly')">最近30天</span>
+      <el-date-picker class="pull-right" style="margin-right:30px;" :clearable="false" v-model="date" type="date" size="small" placeholder="选择日期" @change="dateChange">
+      </el-date-picker>
+      <el-button type="primary" size="small" @click="dataExport" v-if="canControl">下载最近30天商品数据</el-button>
+      <tool-tips :has-view="false" :tips-html="tipsHtml"></tool-tips>
+    </h3>
+    <br>
+    <table-view :config="config" :data="myData">
+      <template slot-scope="scope">
+        {{scope.row[scope.con.prop]}}
+      </template>
+    </table-view>
+  </div>
+</template>
+<script lang="ts">
+import Vue from "vue"
+import { Component, Inject } from "vue-property-decorator"
+import tableView from "./tableView.vue"
+import toolTips from "./toolTips.vue"
+import API from "../../../API"
+import { Getter } from 'vuex-class'
+@Component( {
+  name: "data-product-daily",
+  components: {
+    toolTips,
+    tableView
+  }
+} )
+export default class DataProductDaily extends Vue {
+  @Getter( 'login/roleNames' ) roleNames
+  get canControl () {
+    return [ '商品渠道', '系统管理员' ].some( v => !!this.roleNames[ v ] )
+  }
+  dataType: string = "daily"
+  dataTypeChange ( type ) {
+    this.dataType = type
+    if ( this.date ) this.geData()
+  }
+  tipsHtml: string = `统计当日已完成交易的商品。`
+  config = [
+    { prop: "index", label: "排名", width: "90" },
+    { prop: "name", label: "名称" },
+    { prop: "sku", label: "SKU LC code" },
+    { prop: "total", label: "数量" },
+    { prop: "stock", label: "库存" }
+  ]
+  date: Date = new Date()
+  dailyData: any = {}
+  monthlyData: any[] = []
+  get myData () {
+    if ( !this.date ) return []
+    let type = this.dataType
+    let dateStr = this.formatMyDate( this.date, "yyyy-MM-dd" )
+    return (
+      ( type == "daily" && this.dailyData[ dateStr ] ) ||
+      ( type == "monthly" && this.monthlyData[ dateStr ] ) ||
+      []
+    )
+  }
+  activated () {
+    this.geData()
+  }
+  dateChange ( v ) {
+    if ( v ) {
+      this.geData()
+    } else {
+      this.date = new Date()
+    }
+  }
+  @Inject() formatMyDate
+
+  get dateStr () { // 缓存下日期string
+    return this.formatMyDate( this.date, "yyyy-MM-dd" )
+  }
+  initRequestDate ( dataType: string ) {
+    let beginDate: string
+    let endDate: string = this.dateStr + " 23:59:59"
+    if ( dataType === "daily" ) {
+      beginDate = this.dateStr + " 00:00:00"
+    } else {
+      beginDate =
+        this.formatMyDate( this.date.getTime() - 30 * 24 * 60 * 60 * 1000, "yyyy-MM-dd" ) + " 00:00:00"
+    }
+    return {
+      beginDate,
+      endDate
+    }
+  }
+  geData () {
+
+    if ( this.dataType === "daily" ) {
+      if ( this.dailyData[ this.dateStr ] ) {
+        return
+      }
+    } else {
+      if ( this.monthlyData[ this.dateStr ] ) {
+        return
+      }
+    }
+    this.$http( API.getDailySalesRank, this.initRequestDate( this.dataType ) ).then(
+      ( { data } ) => {
+        let d = data.data
+        d.forEach( ( v, i ) => {
+          v.index = i + 1
+        } )
+        if ( this.dataType === "daily" ) {
+          this.$set( this.dailyData, this.dateStr, d )
+        } else {
+          this.$set( this.monthlyData, this.dateStr, d )
+        }
+      },
+      rej => {
+        if ( this.dataType === "daily" ) {
+          this.$set( this.dailyData, this.dateStr, [] )
+        } else {
+          this.$set( this.monthlyData, this.dateStr, [] )
+        }
+      }
+    )
+  }
+  dataExport () {
+    if ( !this.date ) return
+    // console.log(this.initRequestDate('monthly'))
+    this.$submit( API.exportProductData, this.initRequestDate( 'monthly' ) )
+  }
+  getMonthliData () {
+    if ( this.monthlyData.length ) {
+      return
+    }
+    // console.log(111)
+  }
+}
+</script>
+<style lang="stylus" >
+.data-product-daily {
+  h3 {
+    font-weight: normal;
+
+    >span {
+      display: inline-block;
+      width: 90px;
+      text-align: center;
+      cursor: pointer;
+      font-size: 0.8em;
+
+      &.is-active {
+        font-weight: bold;
+        font-size: 1em;
+      }
+    }
+  }
+}
+</style>
+

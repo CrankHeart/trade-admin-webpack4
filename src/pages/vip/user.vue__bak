@@ -1,0 +1,252 @@
+<template>
+  <div id="vip-user">
+    <lc-title text="客户管理"></lc-title>
+    <lc-condition :condition="condition" @submit="search"></lc-condition>
+    <lc-table-config :base-config="baseConfig" @set-config="setUserConf"></lc-table-config>
+    <lc-table :config="config" :data="data" @cur-change="curChange" :page="page" :key="config.length">
+      <template slot-scope="scope">
+        <template v-if="scope.con.prop =='userType'">
+          <el-select v-model="scope.row['userType']" :key="scope.row.id" size="small" @change="changeUserType(scope.row)">
+            <el-option v-for="(item,index) in userTypes" :key="index" :label="item.name" :value="item.id">
+            </el-option>
+          </el-select>
+        </template>
+        <template v-else-if="scope.con.prop =='roundingType'">
+          <el-select v-model="scope.row['roundingType']" :key="scope.row.id" size="small" @change="changeRoundingType(scope.row)">
+            <el-option v-for="(item,index) in roundingTypes" :key="index" :label="item.name" :value="item.id">
+            </el-option>
+          </el-select>
+        </template>
+        <template v-else-if="scope.con.prop == 'memberLevel'">
+          <el-select v-model="scope.row['memberLevel']" :key="scope.row.id" size="small" @change="changeMemberLevel(scope.row)">
+            <el-option v-for="(item,index) in memberLevels" :key="index" :label="item.name" :value="item.id">
+            </el-option>
+          </el-select>
+        </template>
+        <template v-else-if="scope.con.prop == 'label'">
+          <el-tag :key="tag" v-if="tag" v-for="tag in scope.row[scope.con.prop].split(';')" :closable="true" :close-transition="false" @close="delLabel(tag,scope.row)">
+            {{tag}}
+          </el-tag>
+        </template>
+        <template v-else-if="scope.con.prop == 'saleCity'">
+          <el-input v-model="scope.row[scope.con.prop]" size="small" @blur="changeProp(scope.row,scope.con.prop,scope.con.label)"></el-input>
+        </template>
+        <template v-else-if="scope.con.prop == 'saleResponsiblePerson' || scope.con.prop =='custResponsiblePerson'">
+          <el-input v-model="scope.row[scope.con.prop]" size="small" @blur="changeProp(scope.row,scope.con.prop,scope.con.label)"></el-input>
+        </template>
+
+        <template v-else-if="scope.con.prop =='tenantId'">
+          {{scope.row[scope.con.prop]}}
+        </template>
+
+        <template v-else-if="scope.con.prop == 'control'">
+          <el-button icon="plus" type="primary" size="mini" @click="addLabelPop(scope.row)">新增标签</el-button>
+        </template>
+        <template v-else>
+          {{scope.row[scope.con.prop]}}
+        </template>
+      </template>
+    </lc-table>
+    <!--新增标签-->
+    <el-dialog title="新增标签" v-model="dialogVisible" size="small">
+      <el-form label-width="100px" :rules="rules" ref="label-add">
+        <el-form-item label=" 标签名称" prop="labelName">
+          <el-input v-model="labelName" size="small" placeholder="请输入标签名称"></el-input>
+        </el-form-item>
+      </el-form>
+
+      <span slot="footer" class="dialog-footer">
+        <el-button @click="dialogVisible = false">取 消</el-button>
+        <el-button type="primary" @click="addLabel">确 定</el-button>
+      </span>
+    </el-dialog>
+  </div>
+</template>
+<script lang="ts">
+import Vue from "vue"
+import { Component } from "vue-property-decorator"
+import lcTitle from "../../components/title.vue"
+import lcCondition from "../../components/condition.vue"
+import lcTable from "../../components/table/"
+import lcTableConfig from "../../components/table/control.vue"
+import { Mutation, Getter } from "vuex-class"
+import API from "../../API"
+import { userTypes, regions, memberLevels, roundingTypes } from '../../const/index'
+@Component( {
+  name: "vip-user",
+  components: {
+    lcTitle,
+    lcCondition,
+    lcTable,
+    lcTableConfig
+  }
+} )
+export default class VipUser extends Vue {
+  regions = regions
+  userTypes = userTypes
+  roundingTypes = roundingTypes
+  memberLevels = memberLevels
+
+  condition = [
+    { value: {}, key: "tenant", label: "企业名称", type: "tenantSearch" },
+    { value: "", key: "userType", label: "用户类型", type: "select", options: this.userTypes },
+    { value: [], key: "regions", label: "区域", type: "checkbox", options: this.regions, col: { lg: 16, sm: 24 } }
+  ]
+  @Mutation( "user/setUserConf" ) setUserConf
+  @Getter( "user/userConfig" ) baseConfig
+  @Mutation( 'tenant/setTenantNameStore' ) setTenantNameStore
+  get config () {
+    return this.baseConfig.filter( v => v.isChecked )
+  }
+  data = []
+  page = {
+    cur: 1,
+    num: 20,
+    total: 0
+  }
+  curChange ( cur ) {
+    this.page.cur = cur
+    this.search()
+  }
+  formatData () {
+    let o: any = {}
+    let num = this.page.num
+    o.start = ( this.page.cur - 1 ) * num
+    o.num = num
+    this.condition.forEach( val => {
+      let key = val.key
+      let value: any = val.value
+
+      if ( key == "tenant" ) {
+        o.tenantName = value.name
+        o.tenantId = value.id
+      } else if ( key == "regions" ) {
+        if ( value.length ) {
+          o[ key ] = value
+        }
+      } else if ( key == "userType" ) {
+        if ( value !== '' ) {
+          o[ key ] = value
+        }
+      }
+    } )
+    return o
+  }
+  activated () {
+    this.search()
+  }
+  search ( cur?) {
+    this.page.cur = cur || this.page.cur
+    let o = this.formatData()
+    this.$http( API.getMallUserList, o ).then( ( { data } ) => {
+      data = data.data
+      data.list.forEach( val => {
+        val.saleResponsiblePersonBak = val.saleResponsiblePerson
+        val.custResponsiblePersonBak = val.custResponsiblePerson
+        val.saleCityBak = val.saleCity
+      } )
+      this.data = data.list
+      this.page.total = data.total
+    } )
+  }
+  dialogVisible: boolean = false
+  labelName: string = ""
+  curUser: any = null
+  addLabelPop ( item ) {
+    this.dialogVisible = true
+    this.curUser = item
+  }
+  addLabelClose () {
+    this.dialogVisible = false
+    this.labelName = ""
+    this.curUser = null
+  }
+  rules = {
+    labelName: [ { validator: this.validateName, trigger: "blur,submit" } ]
+  }
+  validateName ( rule, value, cb ) {
+    value = this.labelName && this.labelName.trim()
+    let labels = this.curUser.label.split( ";" )
+    if ( value == "" ) {
+      cb( new Error( "标签名称不能为空" ) )
+    } else if ( value.length > 8 ) {
+      cb( new Error( "标签名称长度不能大于8位" ) )
+    } else if ( labels.indexOf( value ) > -1 ) {
+      cb( new Error( "标签名已存在" ) )
+    }
+  }
+  addLabel () {
+    let myForm: any = this.$refs[ "label-add" ]
+    let isPassed = true
+    myForm.fields.forEach( ( field, index ) => {
+      field.validate( "", errors => {
+        if ( errors ) {
+          isPassed = false
+        }
+      } )
+    } )
+    if ( isPassed ) {
+      let label = [ this.curUser.label, this.labelName ].join( ";" )
+      this.userChange( { label }, this.curUser ).then( res => {
+        this.curUser.label = label
+        this.addLabelClose()
+      } )
+    }
+  }
+  delLabel ( label, item ) {
+    let labels = item.label.split( ";" )
+    let i = labels.indexOf( label )
+    labels.splice( i, 1 )
+    let newLabel = labels.join( ";" )
+    this.userChange( { label: newLabel }, item ).then( res => {
+      item.label = newLabel
+    } )
+  }
+  changeUserType ( item ) {
+    this.userChange( { userType: item.userType }, item ).then( res => {
+      this.$notify( {
+        type: "success",
+        message: "用户类型修改完成！"
+      } )
+    } )
+  }
+  changeRoundingType ( item ) {
+    this.userChange( { roundingType: item.roundingType }, item ).then( res => {
+      this.$notify( {
+        type: "success",
+        message: "货币精确度修改完成！"
+      } )
+      this.setTenantNameStore( item )
+    } )
+  }
+  changeMemberLevel ( item ) {
+    this.userChange( { memberLevel: item.memberLevel }, item ).then( res => {
+      this.$notify( {
+        type: "success",
+        message: "会员等级修改完成！"
+      } )
+    } )
+  }
+  // 销售城市 销售负责人 客服负责人
+  changeProp ( item, prop, label ) {
+    let bak = prop + 'Bak'
+    if ( item[ bak ] == item[ prop ] ) return
+
+    this.userChange( { [ prop ]: item[ prop ] }, item ).then( res => {
+      item[ bak ] = item[ prop ]
+      this.$notify( {
+        type: "success",
+        message: '【' + item.tenantName + '】' + label + "修改完成！"
+      } )
+    } )
+  }
+  userChange ( o, { tenantId, id } ) {
+    return this.$http( API.updateUser, {
+      ...o,
+      tenantId,
+      id
+    } )
+  }
+}
+</script>
+

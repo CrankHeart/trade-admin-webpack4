@@ -1,0 +1,38 @@
+<template>
+  <el-tabs v-model="componentName">
+    <el-tab-pane label="付款凭证列表" name="paymentVoucherList" v-if="$permissionValidate(1054)">
+      <payment-voucher-list v-if="componentName == 'paymentVoucherList'" :tabModule="1"></payment-voucher-list>
+    </el-tab-pane>
+    <el-tab-pane label="创建付款凭证" name="createPaymentVoucher" v-if="$permissionValidate(1055)">
+      <!-- <select-payment-voucher v-if="componentName == 'createPaymentVoucher'" @change-active-name="changeActiveName"></select-payment-voucher> -->
+    </el-tab-pane>
+  </el-tabs>
+</template>
+<script lang="ts">
+import Vue from 'vue'
+import { Component, Prop } from 'vue-property-decorator'
+import paymentVoucherList from '../../server/paymentVoucherList.vue'
+// import selectPaymentVoucher from '../../server/selectPaymentVoucher.vue'
+@Component( {
+  name: 'portrait-detail-payment-voucher',
+  components: {
+    paymentVoucherList
+    // selectPaymentVoucher
+  }
+} )
+export default class portraitDetailPaymentVoucher extends Vue {
+  componentName: string = ''
+  created() {
+    this.componentName = this.$permissionValidate(1054)&&'paymentVoucherList'||this.$permissionValidate(1055)&&'createPaymentVoucher'
+  }
+  activated() {
+    this.componentName = this.$permissionValidate(1054)&&'paymentVoucherList'||this.$permissionValidate(1055)&&'createPaymentVoucher'
+  }
+  changeActiveName(){
+    this.componentName = this.$permissionValidate(1054)&&'paymentVoucherList'||this.$permissionValidate(1055)&&'createPaymentVoucher'
+  }
+
+}
+
+
+</script>

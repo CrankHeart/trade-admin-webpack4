@@ -1,0 +1,71 @@
+import { Component, Inject } from 'vue-property-decorator'
+
+import GroundDiscountApply from './groundDiscountApply.vue'
+import { auditStatus } from './const'
+@Component( {
+  name: 'sku-agree-price-apply',
+
+} )
+export default class SkuAgreePriceApply extends GroundDiscountApply {
+  sourceType = 1
+  title: string = '协议价申请'
+  condition: any[] = [
+    { value: undefined, key: 'tenant', label: '集团名称', type: 'tenantSearch' },
+    { value: undefined, key: 'auditStatus', label: '审核状态', type: 'select', options: auditStatus },
+    { value: undefined, key: 'applyUser', label: '申请人', type: 'text' },
+    { value: undefined, key: 'applyTime', label: '申请时间', type: 'daterange' },
+    { value: undefined, key: 'orderSn', label: '订单号', type: 'text' }
+  ]
+  @Inject() formatMyDate
+  formatDate ( time ) {
+    if ( time ) {
+      return this.formatMyDate( new Date( time ) )
+    }
+  }
+  config: any[] = [
+    { prop: 'tenantId', label: '集团Id', width: 210 },
+    { prop: 'tenantName', label: '集团名称', width: 210 },
+    { prop: 'productName', label: '商品名称', width: 210 },
+    { prop: 'agreePrice', label: '申请协议价', width: 120 },
+    { prop: 'lcSkuCode', label: 'Sku编码', width: 200 },
+    { prop: 'bottomPrice', label: '综合成本价', width: 200 },
+    { prop: 'platformPrice', label: '平台价', width: 200 },
+    { prop: 'factoryLimitPrice', label: '厂家限价', width: 200 },
+    // { prop: 'platformPrice', label: '平台限价', width: 200 },
+    { prop: 'orderSn', label: '订单', width: 200 },
+    { prop: 'auditStatus', label: '审核状态', width: 100 },
+    { prop: 'applyUser', label: '申请人', width: 200 },
+    { prop: 'auditUser', label: '审核人', width: 200 },
+    { prop: 'applyReasons', label: '申请原因', width: 100 },
+    { prop: 'remark', label: '备注', width: 300 },
+    { prop: 'applyTime', label: '申请时间', width: 200 },
+    { prop: 'quoteStatus', label: '报价状态', width: 100 },
+    { prop: 'levelRate', label: '会员价折扣 ', width: 100 },
+    { prop: 'levelPrice', label: '会员价', width: 100 },
+    { prop: 'goalStatus', label: '申请状态', width: 100 },
+    { prop: 'control', label: '操作', fixed: 'right', width: 150 }
+  ]
+  confirmPassAudit ( item ) {
+    let { agreePrice, factoryLimitedPrice = 0, platformPrice = 0 } = item
+    let strArr = []
+    if ( agreePrice < +factoryLimitedPrice ) {
+      strArr.push( '厂家限价' )
+    }
+    if ( agreePrice < +platformPrice ) {
+      strArr.push( '平台限价' )
+    }
+    if ( strArr.length ) {
+      this.$prompt( `申请协议价低于${strArr.join( '与' )}，请输入通过理由`, '提示', {
+        confirmButtonText: '确定',
+        cancelButtonText: '取消',
+        inputPattern: /^[\s\S]*.*[^\s][\s\S]*$/,
+        inputErrorMessage: '输入理由不能为空'
+      } ).then( ( { value } ) => {
+        this.remark = value
+        this.upDateAuditStatus( item, 1 )
+      } )
+    } else {
+      this.upDateAuditStatus( item, 1 )
+    }
+  }
+}

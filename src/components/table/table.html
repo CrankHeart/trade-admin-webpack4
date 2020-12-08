@@ -1,0 +1,37 @@
+<div class="table-with-page">
+  <lc-table-config :base-config="config" @set-config="setConf" v-if="controllerName"></lc-table-config>
+
+  <el-table ref="mutationTable" :data="data" border stripe fit v-loading="loading" :element-loading-text="loadingText"
+    @expand="expandFun" @selection-change="selectionChange" @sort-change="sortChange"
+    :default-sort="{prop: sort.priority, order: sort.order}" :max-height="maxHeight" :height="height"
+    :show-summary="showSummary" :summary-method="getSummaries">
+
+    <el-table-column type="expand" :width="expands&&expands.before" v-if="expands&&expands.before">
+      <template slot-scope="scope">
+        <slot name="expand-before" :row="scope.row"></slot>
+      </template>
+    </el-table-column>
+
+    <el-table-column type="selection" :selectable="selectable" width="55" v-if='selection' fixed></el-table-column>
+
+    <el-table-column v-for="con in filterConfig" :prop="con.prop" :label="con.label" :width="con.width"
+      :resizable="resizable" :sortable="con.sortable" :fixed="con.fixed" :key="con.prop" :filters="con.filters"
+      :filter-method="con.filterMethod" :filter-placement="con.placement">
+      <template slot-scope="scope">
+        <slot :con="con" :row="scope.row" :$index="scope.$index"></slot>
+      </template>
+    </el-table-column>
+
+    <el-table-column type="expand" :width="expands&&expands.after" v-if="expands&&expands.after">
+      <template slot-scope="scope">
+        <slot name="expand-after" :row="scope.row"></slot>
+      </template>
+    </el-table-column>
+  </el-table>
+
+  <slot name='append'></slot>
+
+  <el-pagination v-if="hasPage" :current-page="page.cur" :page-size="page.num" layout="total,prev, pager, next, sizes"
+    :total="page.total" :page-sizes="pageSizes" class="center" @current-change="curChange" @size-change="sizeChange">
+  </el-pagination>
+</div>

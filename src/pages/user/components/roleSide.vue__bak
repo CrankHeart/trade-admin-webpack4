@@ -1,0 +1,121 @@
+<template>
+  <div class="role-side">
+    <el-tabs value="role">
+      <el-tab-pane label="角色" name="role"></el-tab-pane>
+    </el-tabs>
+    <p class="right">
+      <el-button size="mini" type="primary" icon="plus" @click="showRoleEditPop('add')">新增角色</el-button>
+    </p>
+    <div class="box" :style="{height:height}">
+      <ul class="role-list">
+        <li v-for="(role,index) in roleNames" :key="index" :class="{'is-active':curRole.id===role.id}" @click="curRoleChange(role)">
+          {{role.roleName}}
+          <el-button size="mini" icon="edit" class="pull-right" type="primary" @click.stop="showRoleEditPop('update',role)"></el-button>
+        </li>
+      </ul>
+    </div>
+    <el-dialog v-model="popRoleVisible" :title="popType=='add'?'添加新角色':'角色重命名'" size="tiny">
+      <el-form :model="form" :rules="rules" ref="my-form" @submit.native.prevent>
+        <el-form-item prop="newRole">
+          <el-input v-model='form.roleName'></el-input>
+        </el-form-item>
+      </el-form>
+      <span slot="footer">
+        <el-button @click="closeRoleChange">取消</el-button>
+        <el-button type="primary" @click="submitForm">确认</el-button>
+      </span>
+    </el-dialog>
+  </div>
+</template>
+<script lang="ts">
+import Vue from "vue"
+import { Component, Inject, Prop } from "vue-property-decorator"
+import API from "../../../API"
+@Component( {
+  name: "role-side"
+} )
+export default class RoleSide extends Vue {
+  roleNames: any = []
+  @Prop() curRole
+  editRole: any = null
+  @Prop() height: string
+  popType: string = ""
+  form = {
+    roleName: ""
+  }
+  validateUserName ( rule, value, cb ) {
+    value = value && value.trim()
+    if ( value == "" ) {
+      cb( new Error( "角色名不能为空！" ) )
+    }
+    if ( this.roleNames.filter( v => v.name == value ).length > 0 ) {
+      cb( new Error( "角色名不能重复！" ) )
+    }
+  }
+  rules = {
+    roleName: [ { validator: this.validateUserName, trigger: "blur,submit" } ]
+  }
+  popRoleVisible: boolean = false
+  activated () {
+    this.getRoleNames()
+  }
+  getRoleNames () {
+    this.$http( API.roleGetAll2 ).then( ( { data } ) => {
+      this.roleNames = data.data
+      this.curRoleChange( this.roleNames[ 0 ] )
+    } )
+  }
+  curRoleChange ( role ) {
+    this.$emit( "cur-role-change", role )
+  }
+  submitForm () {
+    let myFrom: any = this.$refs[ "my-form" ]
+    let valid = true
+    myFrom.fields.forEach( ( field, index ) => {
+      field.validate( "", errors => {
+        if ( errors ) {
+          valid = false
+        }
+      } )
+    } )
+    if ( valid ) {
+      this.roleChange()
+    }
+  }
+  roleCreate () {
+    this.$http( API.roleAdd2, {
+      ...this.form,
+      broadcast: true
+    } ).then( ( { data } ) => {
+      this.roleNames.push( data.data )
+      this.closeRoleChange()
+    } )
+  }
+  roleUpdate2 () {
+    this.$http( API.roleUpdate2, {
+      ...this.form,
+      id: this.editRole.id,
+      status: 0,
+      broadcast: true
+    } ).then( ( { data } ) => {
+      this.editRole.roleName = this.form.roleName
+      this.closeRoleChange()
+    } )
+  }
+  roleChange () {
+    this.popType == "add" ? this.roleCreate() : this.roleUpdate2()
+  }
+  closeRoleChange () {
+    this.editRole = null
+    this.popType = ""
+    this.popRoleVisible = false
+    this.form.roleName = ""
+  }
+  showRoleEditPop ( type, role?) {
+    this.editRole = role
+    this.popType = type
+    this.popRoleVisible = true
+    this.form.roleName = role && role.roleName
+  }
+}
+</script>

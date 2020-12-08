@@ -1,0 +1,159 @@
+<template>
+  <div class="association-items">
+    <el-table :data="data" border fit style="width: 100%" @expand="myExpandFun" row-key="random" :expand-row-keys="expandArr" v-loading="loading">
+      <el-table-column type="expand">
+        <template slot-scope="scope">
+          <ul v-if="scope.row.skuList&&scope.row.skuList.length" class="expand-cell__inner">
+            <li>
+              <div v-for="con in subConfig" :key="con.value">{{con.label}}</div>
+            </li>
+            <li v-for="(sku,index) in scope.row.skuList" :key="index">
+              <div v-for="con in subConfig" :key="con.value">
+                <span v-if="con.value==='agreePrice'">
+                  ¥ {{calRatePrice(sku.salesPrice,scope.row.rate)}}
+                </span>
+                <span v-else-if="con.value==='salesPrice'">
+                  ¥ {{(+sku[con.value]).toFixed(2)}}
+                </span>
+                <span v-else>{{sku[con.value]}}</span>
+              </div>
+            </li>
+          </ul>
+        </template>
+      </el-table-column>
+      <el-table-column v-for="(con ,index) in config" :prop="con.prop" :label="con.label" :width="con.width" resizable :key="index">
+        <template slot-scope="scope">
+
+          <template v-if="con.prop==='lcSpuCode'">
+            <!-- lcSpuCode -->
+            <template v-if="!scope.row.isAdd">
+              {{scope.row.lcSpuCode}}
+            </template>
+            <template v-else>
+              <el-input v-model="scope.row.lcSpuCode" size="small" @blur="myExpandFun(scope.row,true)"></el-input>
+            </template>
+          </template>
+
+          <template v-else-if="con.prop==='rate'">
+            <div class="el-input el-input--small">
+              <input v-model="scope.row.rate" size="small" step="0.01" type="number" @focus="myExpandFun(scope.row,true)" @change="check(scope.row)" @mousewheel.prevent.native="stopMouseWheelChang" class="el-input__inner">
+            </div>
+          </template>
+
+          <template v-else-if="con.prop==='control'">
+            <template v-if="!scope.row.isAdd">
+              <el-button type="text" @click="del(scope.row)">删除</el-button>
+              <el-button type="text" @click="add(scope.row)" v-if="scope.row.rate!=scope.row.bakRate">修改</el-button>
+            </template>
+            <template v-else>
+              <el-button type="text" @click="add(scope.row)">添加</el-button>
+            </template>
+          </template>
+
+          <template v-else>
+            {{scope.row[con.prop]}}
+          </template>
+        </template>
+      </el-table-column>
+    </el-table>
+    <el-pagination :current-page="page.cur" :page-size="page.num" layout="total,prev, pager, next" :total="page.total" class="center" @current-change="curChange"></el-pagination>
+  </div>
+</template>
+<script lang="ts">
+import Vue from "vue"
+import { Component, Prop, Inject } from "vue-property-decorator"
+import Table from "../../../components/table/index"
+import { debounce } from "../../../utils"
+@Component( {
+  name: "association-items"
+} )
+export default class AssociationItems extends Table {
+  expandArr: any[] = []
+  subConfig = [
+    { label: "规格", value: "specification" },
+    { label: "售价", value: "salesPrice" },
+    { label: "协议价(参考价)", value: "agreePrice" }
+  ]
+  @Prop() tenantType: number
+
+  myExpandFun: ( item: object, isExpanded: boolean ) => void = debounce(
+    function ( item, isExpanded ) {
+      const index = this.expandArr.indexOf( item.random )
+      if ( !item.lcSpuCode ) return
+      item.lcSpuCode = item.lcSpuCode.trim()
+
+      if ( isExpanded ) {
+        if ( index < 0 ) {
+          this.expandArr.push( item.random )
+        }
+        this.getSku( item )
+      } else {
+        this.expandArr.splice( this.expandArr.indexOf( item.random ), 1 )
+      }
+    }, 500, true ).bind( this )
+
+  getSku ( item ) {
+    this.$emit( "get-sku", item )
+  }
+  del ( item ) {
+    this.$emit( "del-item", item )
+  }
+  add ( item ) {
+    if ( !item.lcSpuCode ) {
+      return this.$notify( {
+        type: "warning",
+        message: "请确认所需信息填写完整"
+      } )
+    }
+    if ( item.rate <= 0 || item.rate > 10 ) {
+      return this.$notify( {
+        type: "error",
+        message: "协议率必须大于0且小于10为数字，修改失败！"
+      } )
+    }
+    this.$emit( "add-item", item )
+  }
+  stopMouseWheelChang () {
+    return false
+  }
+  check ( item ) {
+    if ( item.rate !== "" ) {
+      item.rate = +item.rate + ""
+      let rates = item.rate.match( /\d+[.]{0,1}[\d]{0,5}/g )
+      item.rate = ( rates && rates[ 0 ] ) || ""
+      if ( item.rate >= 0 ) return
+      this.$notify( {
+        type: "warning",
+        message: "协议率必须大于0且为数字"
+      } )
+    }
+  }
+  calRatePrice ( salesPrice, rate ) {
+    let scale = this.tenantType ? 1 : 10
+    return ( Math.round( salesPrice * rate * scale ) / scale ).toFixed( 2 )
+  }
+}
+</script>
+<style lang="stylus" scoped>
+.expand-cell__inner {
+  li {
+    display: flex;
+    justify-content: space-around;
+    border-bottom: 1px solid #ccc;
+    line-height: 30px;
+
+    &:first-child {
+      font-size: 18px;
+      font-weight: 700;
+      border-bottom-width: 2px;
+    }
+
+    >div {
+      width: 33%;
+      padding: 5px 20px;
+      box-sizing: border-box;
+    }
+  }
+}
+</style>
+

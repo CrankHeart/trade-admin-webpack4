@@ -1,0 +1,218 @@
+<template>
+  <div id="procurement-create">
+    <lc-title :text="(procurementSn?'编辑':'新建')+'普通采购单'"></lc-title>
+
+    <create-hd v-model="delivery" v-show="step!==1" />
+    <p v-if="!step && !delivery.suppliers" style="color:#aaa">请先选择供应商！</p>
+    <el-button @click="setStep(1)" type="primary" v-if="step!==1 && delivery.suppliers">添加商品</el-button>
+
+    <create-sku-search v-if="step===1" :suppliers="delivery.suppliers"></create-sku-search>
+    <create-result-normal v-if="step==2"></create-result-normal>
+    <div class="total pull-right" v-if="step==2">
+      商品金额：¥ {{goodsAmount.toFixed(2)}}
+      <br/> 运　　费：¥
+      <el-input-number v-model="delivery.freight" :min="0" inline size="small"></el-input-number>
+      <br/> 优惠金额：¥
+      <el-input-number v-model="delivery.discountAmount" :min="0" inline size="small"></el-input-number>
+      <br/> 实付金额：¥ {{totalAmount}}
+      <br/>
+      <el-button @click="save" type="primary" :loading="saveLoading">保存</el-button>
+      <el-button @click="submit" type="primary" :loading="submitLoading">提交</el-button>
+      <el-button @click="clear" type="primary">取消</el-button>
+    </div>
+  </div>
+</template>
+<script lang="ts">
+import Vue from 'vue'
+import { Component, Inject, Watch } from 'vue-property-decorator'
+import { Getter, State, Mutation, Action } from 'vuex-class'
+import API from '../../API'
+
+import lcTitle from '../../components/title.vue'
+import createHd from './components/createHd.vue'
+import createSkuSearch from './components/createSkuSearch.vue'
+import createResultNormal from './components/createResultNormal.vue'
+@Component( {
+  name: 'procurement-create',
+  components: {
+    lcTitle,
+    createHd,
+    createSkuSearch,
+    createResultNormal
+  }
+} )
+export default class ProcurementCreate extends Vue {
+  get procurementSn () {
+    return this.$route.params.procurementSn
+  }
+  @State( state => state.procurement.step ) step
+  @State( state => state.procurement.procurementList ) procurementList
+  @Mutation( 'procurement/setStep' ) setStep
+  @Mutation( 'procurement/clearProcurementList' ) clearProcurementList
+  @Mutation( 'procurement/addProcurementList' ) addProcurementList
+  @Mutation( 'procurement/calProcurementListItemNum' ) calProcurementListItemNum
+  delivery = {
+    suppliers: '',
+    wareHouse: '',
+    deliverySource: 0,
+    // supplierDeliveryDate: '',
+    freight: '',
+    discountAmount: ''
+  }
+  get goodsAmount (): number {
+    let total = 0
+    Object.keys( this.procurementList ).forEach( v => {
+      let item = this.procurementList[ v ]
+      total += ( item.price * item.supplyNum )
+    } )
+    return total
+  }
+
+  get totalAmount (): string {
+    let { freight, discountAmount } = this.delivery
+    let goodsAmount = +this.goodsAmount
+    return ( goodsAmount + ( +freight ) - ( +discountAmount ) ).toFixed( 2 )
+  }
+  activated () {
+    if ( this.procurementSn ) {
+      this.setStep( 2 )
+      this.getData()
+    }
+    this.delivery.deliverySource = 0
+  }
+  @Inject() formatMyDate
+  getData () {
+
+    this.$http( API.selectProcurement, { procurementSn: this.procurementSn } ).then( ( { data } ) => {
+      let d = data.data || {}
+      d = d.list && d.list[ 0 ] || { planSkuDetails: [] }
+      Object.keys( this.delivery ).forEach( v => {
+        this.delivery[ v ] = d[ v ]
+      } )
+
+      let o: any = {}
+      d.planSkuDetails.forEach( ( v: any ) => {
+        let deliveryDate: any = v.deliveryDate || {}
+        v.deliveryDate = this.formatMyDate( deliveryDate && deliveryDate.time )
+        v.supplyNum += v.number
+        this.addProcurementList( v )
+      } )
+
+    }, () => {
+      this.$notify( {
+        type: 'error',
+        message: '查询错误，请确认！'
+      } )
+    } )
+  }
+
+  deactivated () {
+    this.setStep( 0 )
+    this.clearProcurementList()
+    Object.keys( this.delivery ).forEach( v => {
+      this.delivery[ v ] = ''
+    } )
+  }
+  validate () {
+    for ( let i in this.delivery ) {
+      if ( this.delivery[ i ] === '' ) {
+        this.$notify( {
+          type: 'error',
+          message: i + '请正确输入！'
+        } )
+        return false
+      }
+    }
+    let keys = Object.keys( this.procurementList )
+
+    for ( let i = 0, l = keys.length; i < l; i++ ) {
+      let v = keys[ i ]
+      let mm = this.procurementList[ v ]
+      if ( !+mm.price ) {
+        this.$notify( {
+          type: 'error',
+          message: `请确定商品【${mm.lcSkuCode}】价格输入正确！`
+        } )
+        return false
+      }
+      if ( !mm.deliveryDate ) {
+        this.$notify( {
+          type: 'error',
+          message: `请确定商品【${mm.lcSkuCode}】交货日期输入正确！`
+        } )
+        return false
+      }
+      if ( !+mm.supplyNum ) {
+        this.$notify( {
+          type: 'error',
+          message: `请确定商品【${mm.lcSkuCode}】数量输入正确！`
+        } )
+        return false
+      }
+    }
+
+    if ( +this.totalAmount <= 0 ) {
+      this.$notify( {
+        type: 'error',
+        message: '请确定价格输入正确！'
+      } )
+      return false
+    }
+    return true
+  }
+  ajaxOption () {
+    let o: any = {
+      ...this.delivery,
+      planSkuDetails: [],
+      deliverySn: [],
+      goodsAmount: this.goodsAmount,
+      totalAmount: this.totalAmount
+    }
+
+    Object.keys( this.procurementList ).forEach( val => {
+      let item = this.procurementList[ val ]
+      item.deliveryDate = this.formatMyDate( item.deliveryDate )
+      o.planSkuDetails.push( item )
+    } )
+
+    if ( this.procurementSn ) {
+      o.procurementSn = this.procurementSn
+    }
+    return o
+  }
+  saveLoading: boolean = false
+  submitLoading: boolean = false
+  save () {
+    if ( !this.validate() ) {
+      return
+    }
+    this.saveLoading = true
+    this.$http( API.addProcurement, this.ajaxOption() ).then( ( { data } ) => {
+      this.saveLoading = false
+      this.clear()
+    } )
+  }
+  submit () {
+    if ( !this.validate() ) {
+      return
+    }
+    this.submitLoading = true
+    this.$http( API.submitProcurement, this.ajaxOption() ).then( ( { data } ) => {
+      this.submitLoading = false
+      this.clear()
+    } )
+  }
+  clear () {
+    Object.keys( this.delivery ).forEach( v => {
+      this.delivery[ v ] = ''
+    } )
+    this.$router.push( '/procurement/list' )
+  }
+}
+</script>
+<style lang="stylus" scoped>
+.total
+  line-height 40px
+.el-input-number
+  vertical-align middle
+</style>

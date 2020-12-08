@@ -1,0 +1,51 @@
+<template>
+  <div class="product-config">
+    <el-table :data="dataList" border stripe fit v-if="dataList">
+      <template v-if="isProduct">
+        <el-table-column prop="lcSkuCode" label="lcSkuCode" width="180"></el-table-column>
+        <el-table-column prop="specification" label="规格"></el-table-column>
+
+        <el-table-column prop="themeEventName" label="活动名称"></el-table-column>
+        <el-table-column prop="jumpLink" label="跳转">
+          <template slot-scope="scope">
+            <el-input v-model="scope.row.jumpLink" size="small" :disabled="disabled"></el-input>
+          </template>
+        </el-table-column>
+      </template>
+      <template v-else>
+        <el-table-column v-for="conf in config" :prop="conf.prop" :label="conf.label" :key="conf.prop">
+          <template slot-scope="scope">
+            <el-input v-model="scope.row[conf.prop]" :disabled="disabled" />
+          </template>
+        </el-table-column>
+      </template>
+    </el-table>
+  </div>
+</template>
+<script lang="ts">
+import Vue from 'vue'
+import { Component, Prop, Watch } from 'vue-property-decorator'
+@Component( {
+  name: 'product-config'
+} )
+export default class ProductConfig extends Vue {
+  @Prop( { default: () => [] } )
+  config: any[]
+  @Prop( { type: [ Array, Object ] } )
+  value
+  @Prop()
+  disabled: boolean
+  @Prop()
+  floorProducts: any[]
+  @Prop()
+  floorContainers: any[]
+
+  get isProduct () {
+      return this.value.floorType === 'product'
+  }
+  get dataList () {
+    let type = this.value.floorType === 'activity' ? 'floorContainers' : 'floorProducts'
+    return this[ type ]
+  }
+}
+</script>

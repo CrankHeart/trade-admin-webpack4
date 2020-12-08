@@ -1,0 +1,224 @@
+<template>
+  <div class="detail-spu">
+    <h3>SPU</h3>
+    <lc-table-config :base-config="baseConfig" @set-config="setSpuConf"></lc-table-config>
+    <lc-table :config="spuConfig" :data="[data]" :has-page="false" :key="spuConfig.length">
+      <template slot-scope="scope">
+        <!--唯一性验证-->
+        <template v-if="scope.con.prop =='brand'">
+          <el-select v-model="scope.row.brandId" placeholder="请选择" size="small" filterable>
+            <el-option v-for="(brand,index) in brandList" :label="brand.name" :value="brand.id" :key="index" @click.native="validateProductUnique('brand',brand)">
+            </el-option>
+          </el-select>
+        </template>
+        <template v-else-if="scope.con.prop =='store'">
+          <el-select v-model="scope.row.storeId" placeholder="请选择" size="small" filterable>
+            <el-option v-for="(store,index) in stores" :label="store.storeName" :value="store.storeId" :key="index" @click.native="validateProductUnique('store',store)">
+            </el-option>
+          </el-select>
+        </template>
+        <template v-else-if="scope.con.prop =='name'">
+          <el-input v-model="scope.row[scope.con.prop]" placeholder="空" type="textarea" size="small" :autosize="{ minRows: 1, maxRows: 6 }" @blur="validateProduct"></el-input>
+        </template>
+        <template v-else-if="scope.con.prop =='unit'">
+          <el-input v-model="scope.row[scope.con.prop]" placeholder="空" size="small" @blur="validateProduct"></el-input>
+        </template>
+        <!--唯一性验证-->
+        <template v-else-if="scope.con.prop =='category3stId'">
+          <el-select v-model="scope.row.category3stId" placeholder="请选择" size="small" filterable>
+            <el-option v-for="item in allTypes" :label="item.name" :value="item.id" :key="item.id">
+            </el-option>
+          </el-select>
+        </template>
+        <template v-else-if="scope.con.prop =='label'">
+          <el-select v-model="scope.row.label" placeholder="请选择" size="small" filterable>
+            <el-option v-for="(label,index) in labels" :label="label" :value="label" :key="index">
+            </el-option>
+          </el-select>
+        </template>
+        <template v-else-if="scope.con.prop=='imgControl'">
+          <img-config :item="scope.row" :type="0"></img-config>
+        </template>
+        <template v-else-if="scope.con.prop =='subtitle'">
+          <el-input v-model="scope.row[scope.con.prop]" placeholder="空" type="textarea" size="small" :autosize="{ minRows: 1, maxRows: 6 }"></el-input>
+        </template>
+        <template v-else-if="scope.con.prop =='qualityGuaranteePeriod'">
+          <el-input v-model="scope.row[scope.con.prop]" placeholder="空" size="small" type="number"></el-input>
+        </template>
+        <template v-else-if="'lcCode'.indexOf(scope.con.prop)>-1">
+          <span>{{scope.row[scope.con.prop]}}</span>
+        </template>
+
+        <template v-else-if="scope.con.prop =='negotiable'">
+          <el-select v-model="scope.row.negotiable" placeholder="请选择" size="small" filterable>
+            <el-option label="是" :value="1">是</el-option>
+            <el-option label="否" :value="0">否</el-option>
+          </el-select>
+        </template>
+        <template v-else-if="scope.con.prop =='needAptitude'">
+          <aptitude-config :item="scope.row" type="spu" @handler-callback="$emit('save-spu')"></aptitude-config>
+        </template>
+        <template v-else-if="scope.con.prop =='affiliation'">
+          <span class="affiliation-config" @click="affiliationShow">点击查看</span>
+          <el-dialog v-model="affiliationVisible">
+            <el-checkbox v-for="item in affiliationCheckBox" :key="item.id" v-model="item.isChecked" @change="affiliationChange(item)">{{item.name}}</el-checkbox>
+
+            <el-button class="pull-right" type="primary" @click="saveAffiliation">保存</el-button>
+          </el-dialog>
+        </template>
+        <template v-else-if="/^level\d+/.test(scope.con.prop)">
+          <el-input-number size="small" v-model="scope.row[scope.con.prop]" :min="0" :debounce="500" :step="0.00001" :max="1"></el-input-number>
+        </template>
+        <template v-else>
+          <el-input v-model="scope.row[scope.con.prop]" placeholder="空" size="small"></el-input>
+        </template>
+      </template>
+    </lc-table>
+    <el-button type="primary" @click="$emit('save-spu')">保存</el-button>
+  </div>
+</template>
+
+<script lang="ts">
+import Vue from "vue"
+import { Component, Prop, Watch } from "vue-property-decorator"
+import lcTable from "../../../components/table"
+import lcTableConfig from "../../../components/table/control.vue"
+import aptitudeConfig from './aptitudeConfig.vue'
+import imgConfig from './imgConfig.vue'
+import { State, Getter, Mutation, Action } from "vuex-class"
+import API from "../../../API"
+import { debounce } from '../../../utils/'
+@Component( {
+  name: "spu-detail",
+  components: {
+    lcTable,
+    lcTableConfig,
+    aptitudeConfig,
+    imgConfig
+  }
+} )
+export default class SpuDetail extends Vue {
+  @Getter( "product/spuConfig" ) baseConfig
+  @Mutation( "product/setSpuConf" ) setSpuConf
+  @Prop() data
+  @State( state => state.category.category2 ) allTypes
+  @Action( 'stores/getAllStores' ) getAllStores
+  @State( state => state.brand.brandList ) brandList
+  @Getter( "stores/storeList" ) stores
+
+  get spuConfig () {
+    return this.baseConfig.filter( v => v.isChecked )
+  }
+  affiliationVisible: any = false
+  @Watch( 'data' )
+  dataWatcher ( v ) {
+    if ( v.affiliation ) {
+      this.affiliation = v.affiliation
+    }
+  }
+  affiliationCheckBox: any = [
+    { isChecked: false, name: 'ERP', id: 0 },
+    { isChecked: false, name: 'WMS', id: 1 },
+    { isChecked: false, name: 'CRM', id: 2 }
+  ]
+  affiliationShow () {
+    this.affiliationVisible = !this.affiliationVisible
+    let affiliation = []
+    for ( let i = 0; i < 3; i++ ) {
+      affiliation.push( this.data.affiliation >> i & 1 )
+    }
+    affiliation && affiliation.forEach( ( v, i ) => {
+      this.affiliationCheckBox[ i ][ 'isChecked' ] = !!v
+    } )
+  }
+
+  affiliation: number = 0
+  // get affiliation () {
+  //   return this.data.affiliation
+  // }
+  // set affiliation ( v ) {
+  //   this.$set(this.data,'affiliation',v)
+  // }
+  affiliationChange ( v ) {
+    this.$set( this.affiliationCheckBox, v.id, v )
+    let a = []
+    this.affiliationCheckBox.forEach( v => {
+      a.push( +v.isChecked )
+    } )
+    this.affiliation = 0
+    a.forEach( ( v, i ) => {
+      this.affiliation += a[ i ] * ( Math.pow( 2, i ) )
+    } )
+  }
+  saveAffiliation () {
+    let { id } = this.data
+
+    this.$http( API.updateSpuNonBusinessInfo, { affiliation: this.affiliation, id } ).then( res => {
+      this.$set( this.data, 'affiliation', this.affiliation )
+      this.affiliationVisible = false
+    } )
+  }
+  created () {
+    this.getAllStores()
+  }
+  labels = [ "常备商品", "订购商品" ]
+  validateProduct () {
+    let validateProduct = this.validateProductUnique.bind( this )
+    validateProduct()
+  }
+  validateProductUnique: ( type?: string, item?: any ) => void = debounce( function ( type, item ) {
+    let { brandId, name, storeId, brandBak, storeBak, /* unit,unitBak, */ nameBak } = this.data
+    // console.log(brandId, name, storeId, unit, brandBak, storeBak, unitBak, nameBak, this.data)
+    let id = this.$route.params.id
+    if ( !id ) {
+      return
+    }
+    this.$http( API.validateProductUnique, {
+      brandId,
+      name,
+      storeId,
+      // unit,
+      id
+    } ).then( ( { data } ) => {
+      if ( !data.data ) {
+        this.data.brandId = brandBak
+        this.data.storeId = storeBak
+        // this.data.unit = unitBak
+        this.data.name = nameBak
+      } else {
+        this.data.brandBak = brandId
+        this.data.storeBak = storeId
+        // this.data.unitBak = unit
+        this.data.nameBak = name
+        if ( type == 'brand' ) {
+          this.data.brandName = item.name
+        } else if ( type == 'store' ) {
+          this.data.storeName = item.storeName
+        }
+      }
+    }, () => {
+      this.data.brandId = brandBak
+      this.data.storeId = storeBak
+      // this.data.unit = unitBak
+      this.data.name = nameBak
+      this.$notify( {
+        type: 'error',
+        message: '不可修改！'
+      } )
+    } )
+  }, 500, true )
+}
+</script>
+<style lang="stylus" scoped>
+.detail-spu {
+  margin-bottom: 20px;
+}
+
+.el-input {
+  min-width: 100px;
+}
+
+.affiliation-config
+  color #20a0ff
+  cursor pointer
+</style>

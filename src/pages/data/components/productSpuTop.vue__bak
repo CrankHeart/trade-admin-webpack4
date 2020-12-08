@@ -1,0 +1,126 @@
+<template>
+  <div class="data-product-spu-top box">
+    <h3 class="relative">
+      TOP{{data.length}}
+      <el-select class="pull-right" size="small" v-model="rankType" placeholder="请选择">
+        <el-option label="按销售量排行" :value="0"></el-option>
+        <el-option label="按销售额排行(单位：元)" :value="1"></el-option>
+      </el-select>
+    </h3>
+    <br>
+    <table-view :config="config" :data="data" @expand="expand" :expands="{before:'90'}">
+      <template slot-scope="scope">
+        {{scope.row[scope.con.prop]}}
+      </template>
+      <template slot="expand-before" slot-scope="scope">
+        <table cellspacing="0" cellpadding="0" border="0" width="100%">
+          <tr v-if="!sku[scope.row.spu]">
+            <td colspan='4' align="center">加载中...</td>
+          </tr>
+          <tr v-for="(item,index) in sku[scope.row.spu]" :key="index">
+
+            <td width="90"></td>
+            <td>
+              <div class="cell">
+                <el-tooltip class="item" effect="dark" v-if="item.skuName&&item.skuName.length>30">
+                  <div slot="content">{{item.skuName}}</div>
+                  <span>{{elliptical(item.skuName,30)}}</span>
+                </el-tooltip>
+                <span v-else>{{item.skuName}}</span>
+              </div>
+            </td>
+            <td width="200">
+              <div class="cell">{{item.sku}}</div>
+            </td>
+            <td width="100">
+              <div class="cell">{{rankType?item.saleMoney:item.saleNumber}}</div>
+            </td>
+          </tr>
+        </table>
+      </template>
+    </table-view>
+  </div>
+</template>
+<script lang="ts">
+import Vue from 'vue'
+import { Component, Inject, Watch } from 'vue-property-decorator'
+import tableView from './tableHasExpand.vue'
+import toolTips from './toolTips.vue'
+import API from '../../../API'
+@Component( {
+  name: 'data-product-spu-top',
+  components: {
+    toolTips,
+    tableView
+  }
+} )
+export default class DataProductSpuTop extends Vue {
+  baseConfig = [
+    { prop: 'index', label: '排名', width: '90' },
+    { prop: 'spuName', label: '商品', width: '' },
+    { prop: 'brandName', label: '品牌', width: '' },
+    { prop: 'spu', label: 'LC CODE', width: '200' }
+  ]
+  get config () {
+    return this.baseConfig.concat( this.rankType ?
+      { prop: 'saleMoney', label: '销售额', width: '100' }
+      : { prop: 'saleNumber', label: '销售量', width: '100' } )
+  }
+  data = []
+  sku: any = {}
+  activated () {
+    this.getData()
+  }
+  dateChange ( v ) {
+    if ( v ) {
+      this.getData()
+    }
+  }
+  elliptical ( str, len, bo ) {
+    let l = str.length;
+    if ( l > len ) {
+      return str.substr( 0, len ) + '...'
+    }
+    return str
+  }
+  @Inject() formatMyDate
+  getData () {
+    this.$http( API.getLcCodeRank, {
+      rankType: this.rankType
+    } ).then( ( { data } ) => {
+      let d = data.data
+      this.data = d
+    }, rej => {
+      this.data = []
+    } )
+  }
+  rankType: number = 0
+  @Watch( 'rankType' )
+  rankTypeWatcher ( v ) {
+    this.getData()
+  }
+  expand ( v ) {
+    let spu = v.spu
+    if ( this.sku[ spu ] ) return
+    this.getSku( spu )
+  }
+  getSku ( spu ) {
+    this.$http( API.getSkuListBySpuId, {
+      spu
+    } ).then( ( { data } ) => {
+      this.$set( this.sku, spu, data.data )
+    } )
+  }
+}
+</script>
+<style lang="stylus">
+.data-product-spu-top
+  .el-table__expanded-cell
+    padding 0
+  table
+      table
+          td
+            border-left none
+            border-right none
+</style>
+

@@ -1,0 +1,81 @@
+<template>
+  <div class="procurement-replenishment__lcsearch">
+    <el-form inline @submit.native.prevent>
+      <el-form-item label="LC编码">
+        <el-input v-model="lcCode" placeholder="请输入LC编码" />
+      </el-form-item>
+      <el-form-item>
+        <el-button @click="search">搜索</el-button>
+      </el-form-item>
+    </el-form>
+    <search-products-list @cur-change="curChange" :sku="sku" :page="page"></search-products-list>
+  </div>
+</template>
+<script lang="ts">
+  import Vue from 'vue'
+  import { Component } from 'vue-property-decorator'
+  import { Getter, State, Mutation, Action } from 'vuex-class'
+  import lcTable from '../../../components/table/index'
+  import API from '../../../API'
+
+  import searchProductsList from './searchProductsList.vue'
+
+  @Component({
+    name: 'procurement-replenishment__lcsearch',
+    components: {
+      lcTable,
+      searchProductsList
+    }
+  })
+  export default class ProcurementReplenishmentLcSearch extends Vue {
+    @State(state => state.procurement.lcCodeList) lcCodeList
+    @State(state => state.procurement.purchaseListObj) purchaseListObj
+    lcCode = ''
+
+    page = {
+      num: 10,
+      cur: 1,
+      total: 0
+    }
+
+    curChange(v) {
+      this.page.cur = v
+    }
+    skuList: any = []
+    get sku() {
+      let num = this.page.num
+      let start = (this.page.cur - 1) * num
+      let sku = this.skuList.slice(start, start+num)
+      sku.forEach(v => {
+        v.isLock = this.lcCodeList.some(val => val.lcSkuCode === v.lcSkuCode)
+      })
+      return sku
+    }
+    search() {
+      let lcCode = this.lcCode.trim()
+      if (!lcCode || (lcCode.length !== 13 && lcCode.length !== 8)) {
+        return this.$notify({
+          type: 'error',
+          message: '请确认lcCode输入正确！'
+        })
+      }
+      if (lcCode.length == 8) {
+        lcCode = '11000' + lcCode
+      }
+      this.$http(API.getSkuOfAgreeProduct, { lcCode }).then(({ data }) => {
+        data.sku.forEach(v => {
+          v.checked = !!this.purchaseListObj[v.lcSkuCode]
+          v.supplyNum = v.checked && this.purchaseListObj[v.lcSkuCode].supplyNum || 0
+          v.spu = data.spu
+          v.isLock = false
+        })
+        this.skuList = data.sku
+        this.page.total = this.skuList.length
+      }, () => {
+        this.skuList = []
+        this.page.total = 0
+      })
+    }
+  }
+</script>
+

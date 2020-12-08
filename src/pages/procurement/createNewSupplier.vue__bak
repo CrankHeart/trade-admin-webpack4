@@ -1,0 +1,465 @@
+<template>
+  <div id="newProcurement-create">
+    <lc-title :text="titleList[step]"></lc-title>
+    <!-- 第一步 ： basicInfo-->
+    <div class="create-basicInfo" v-if="!step">  
+      <supplier-basic-info  @goStep2="goStep2">
+      </supplier-basic-info>
+    </div>
+    <!-- 第二步 ： addGoods-->
+    <div class="create-addGoods" v-if="step===1">
+      <supplier-goods-search @getSupplierSearchParams="getGoodsSearchRes" >
+      </supplier-goods-search>
+      <div v-if="goodsInfo.length" >
+        <lc-table :config="supplierAddConfig" :data="goodsInfo" @cur-change="curChange" :page="page" :key="supplierAddConfig.length">
+          <template slot-scope="scope">
+            <template v-if="scope.con.prop==='check' ">
+              <el-checkbox v-model="scope.row['isChecked']"   v-if="scope.row['supplierGoodsStatus']===0">
+              </el-checkbox>
+              <el-checkbox v-model="scope.row['isDisabled']"  :disabled="scope.row['supplierGoodsStatus']===1"  v-else>
+              </el-checkbox>
+            </template>
+            <template v-if="scope.con.prop==='price' ">
+              <el-input  type="number" v-model="scope.row['agreePrice']" @change="handleAgreePrice(scope.row)"  :disabled="scope.row['supplierGoodsStatus']===1">
+              </el-input>
+            </template>
+            <template v-else>
+              {{scope.row[scope.con.prop]}}
+            </template>
+          </template>
+        </lc-table>
+        <div class="sticky-bottom" v-if="goodsInfo.length">
+          <el-checkbox v-model="searchGoodsSelectAllStatus" @change="searchGoodsSelectAll">
+            全选
+          </el-checkbox>
+          <el-button type="primary"  @click="addGoodsToSupplier" >添加选中</el-button>
+           <el-button type="primary" class="pull-right" @click="goStep3" >下一步</el-button>  
+        </div>
+      </div>
+    </div>
+    <!-- 第三步 ： supplierRes-->
+    <div class="create-getGoods" v-if="step===2">
+      <div >
+        <lc-table :config="supplierResConfig" :data="goodsListInsupplier" @cur-change="curChange1" :page="page1" :key="supplierResConfig.length">
+          <template slot-scope="scope">
+            <template v-if="scope.con.prop==='price' ">
+              <el-input  type="number" v-model="scope.row['agreePrice']" @change="handleAgreePrice(scope.row)"  :disabled="scope.row['supplierGoodsStatus']===1">
+              </el-input>
+            </template>
+            <template v-if="scope.con.prop==='ctrl' ">
+              <el-button type="primary"  @click="delCurrentGoodsInSupplier(scope.row)">删除</el-button>
+            </template>
+            <template v-else>
+              {{scope.row[scope.con.prop]}}
+            </template>
+          </template>
+        </lc-table>
+        <div>
+          <el-button type="primary"  @click="delGoodsInSupplier" v-if="goodsListInsupplier.length">删除本页</el-button>
+          <el-button type="primary"  @click="backStep2" >添加商品</el-button>  
+          <el-button type="primary"  @click="updateGoodsPriceInSupplier" :disabled="!goodsListInsupplier.length" >保存</el-button>
+        </div>
+        <p class="create-getGoods__toList">
+          <el-button type="primary"  @click="goSupplierList" >提交</el-button>
+        </p>
+      </div>
+    </div>
+  </div>
+</template>
+<script lang="ts">
+import Vue from "vue";
+import { Component, Inject, Watch } from "vue-property-decorator";
+import { Getter, State, Mutation, Action } from "vuex-class";
+import API from "../../API";
+import { supplierAddConfig, supplierResConfig } from "./const/index";
+import lcTitle from "../../components/title.vue";
+import supplierBasicInfo from "./components/supplierBasicInfo.vue";
+import supplierGoodsSearch from "./components/supplierGoodsSearch.vue";
+import lcTable from "../../components/table/index";
+@Component({
+  name: "supplier-create-new",
+  components: {
+    lcTitle,
+    supplierBasicInfo,
+    supplierGoodsSearch,
+    lcTable
+  }
+})
+export default class ProcurementCreate extends Vue {
+  // 1：在data中初始化数据
+  step: number = 0;
+  titleList = [
+    "新建供应商--填写基本信息",
+    "新建的供应商--添加商品",
+    "新建的供应商--查看已添加的商品"
+  ];
+  goodsInfo = [];
+  goodsListInsupplier = [];
+  // 查询结果分页 -第2步
+  page = {
+    cur: 1,
+    num: 10,
+    total: 0
+  };
+  supplierId = 0;
+  goodsSearchParams = null;
+  supplierAddConfig = supplierAddConfig;
+  supplierResConfig = supplierResConfig;
+  searchGoodsSelectAllStatus = false;
+  //添加结果分页 -第3步
+  page1 = {
+    cur: 1,
+    num: 10,
+    total: 0
+  };
+  supplierGoodsSelectAllStatus = false;
+  // created watch
+  deactivated() {
+    this.$destroy();
+  }
+  @Watch("goodsListInsupplier", { deep: true })
+  goodsListInsupplierWatcher(v) {
+    this.goodsListInsupplier = v;
+    let isSelectAll = true;
+    v.forEach(item => {
+      if (!item.isChecked) {
+        isSelectAll = false;
+      }
+    });
+    this.supplierGoodsSelectAllStatus = isSelectAll;
+  }
+  @Watch("goodsInfo", { deep: true })
+  goodsInfoWatcher(v) {
+    this.goodsInfo = v;
+    let isSelectAll = true;
+    v.forEach(item => {
+      if (item.supplierGoodsStatus === 0 && !item.isChecked) {
+        isSelectAll = false;
+      }
+      if (item.supplierGoodsStatus === 1) {
+        item.isDisabled = true;
+      }
+    });
+    this.searchGoodsSelectAllStatus = isSelectAll;
+  }
+  // 3：methods方法
+  // 第2步：添加
+  goStep2({ step, supplierId }) {
+    this.step = step;
+    this.supplierId = supplierId;
+    // this.basicInfo.id = supplierId;
+  }
+
+  goStep3() {
+    this.page1.cur=1;
+    this.getGoodsInSupplier(this.supplierId);
+  }
+  getGoodsSearchRes({ type, lcSkuCode, brandId }) {
+    this.page.cur=1;
+    this.goodsInfo = [];
+    this.goodsSearchParams = { type, lcSkuCode, brandId };
+    if (type === "skuCode") {
+      let params = {
+        lcSkuCode: lcSkuCode * 1 + "",
+        supplierId: this.supplierId
+      };
+      this.getAllSkuByLcSkuCode(params);
+    } else if (type === "brandId") {
+      let { cur, num } = this.page;
+      let params = {
+        brandId: brandId,
+        supplierId: this.supplierId,
+        start: (cur - 1) * num,
+        num: num
+      };
+      this.getAllSkuByBrandId(params);
+    }
+  }
+  getAllSkuByLcSkuCode(params) {
+    this.goodsInfo = [];
+    this.$http(API.getAllSkuByLcSkuCode, params).then(
+      ({ data }) => {
+        data.sku.isChecked = false;
+        data.sku.isDisabled = false;
+        // data.sku.agreePrice = 0;
+        this.goodsInfo.push(data.sku);
+        this.page.total = 1;
+      },
+      ({ data }) => {
+        this.$notify({
+          type: "warning",
+          message: data.msg
+        });
+      }
+    );
+  }
+  getAllSkuByBrandId(params) {
+    let { cur, num } = this.page;
+    params.start = (cur - 1) * num;
+    params.num = num;
+    this.goodsInfo = [];
+    this.$http(API.getAllSkuByBrandId, params).then(
+      ({ data }) => {
+        let arr = data.skuList;
+        arr.forEach(item => {
+          item.isChecked = false;
+          item.isDisabled = false;
+          // item.agreePrice = 0;
+        });
+        this.goodsInfo = arr;
+        this.page.total = data.total;
+      },
+      ({ data }) => {
+        this.$notify({
+          type: "warning",
+          message: data.msg
+        });
+      }
+    );
+  }
+  curChange(cur) {
+    this.goodsInfo = [];
+    this.page.cur = cur;
+    let { type, lcSkuCode, brandId } = this.goodsSearchParams;
+    if (type === "skuCode") {
+      let params = {
+        lcSkuCode: lcSkuCode * 1 + "",
+        supplierId: this.supplierId
+      };
+      this.getAllSkuByLcSkuCode(params);
+    } else if (type === "brandId") {
+      let { cur, num } = this.page;
+      let params = {
+        brandId: brandId,
+        supplierId: this.supplierId,
+        start: (cur - 1) * num,
+        num: num
+      };
+      this.getAllSkuByBrandId(params);
+    }
+  }
+  searchGoodsSelectAll() {
+    this.goodsInfo.forEach(item => {
+      if (item.supplierGoodsStatus === 0 && this.searchGoodsSelectAllStatus) {
+        item.isChecked = true;
+      } else if (item.supplierGoodsStatus === 0 && !this.searchGoodsSelectAllStatus) {
+        item.isChecked = false;
+      }
+    });
+  }
+  handleAgreePrice(item) {
+    if (item.agreePrice < 0) {
+      item.agreePrice = 0;
+    }
+  }
+  addGoodsToSupplier() {
+    let params = this.getGoodsOperateParams();
+    if (!params) {
+      return;
+    }
+    this.$http(API.addSupplierGoods, params).then(({ data }) => {
+      this.$notify({
+        type: "success",
+        message: "添加成功"
+      });
+      // 得到 goodInfo的最新状态
+      let { type, lcSkuCode, brandId } = this.goodsSearchParams;
+      if (type === "skuCode") {
+        let params = {
+          lcSkuCode: lcSkuCode,
+          supplierId: this.supplierId
+        };
+        this.getAllSkuByLcSkuCode(params);
+      } else if (type === "brandId") {
+        let { cur, num } = this.page;
+        let params = {
+          brandId: brandId,
+          supplierId: this.supplierId,
+          start: (cur - 1) * num,
+          num: num
+        };
+        this.getAllSkuByBrandId(params);
+      }
+    });
+  }
+  getGoodsOperateParams() {
+    let params = [];
+    this.goodsInfo.forEach(item => {
+      if (item.isChecked) {
+        let obj = {
+          supplierId: this.supplierId,
+          skuId: item.id,
+          lcCode: item.lcSkuCode,
+          agreePrice: item.agreePrice
+        };
+        params.push(obj);
+      }
+    });
+    if (!params.length) {
+      this.$notify({
+        type: "warning",
+        message: "未选中一个商品"
+      });
+      return false;
+    }
+    return params;
+  }
+  // 第三步--获取供应商下商品
+  // 分页
+  curChange1(cur) {
+    this.page1.cur = cur;
+    this.getGoodsInSupplier(this.supplierId);
+  }
+  // 查询
+  getGoodsInSupplier(supplierId) {
+    this.goodsListInsupplier = [];
+    let { cur, num } = this.page1;
+    let params = {
+      supplierId: supplierId,
+      start: (cur - 1) * num,
+      num: num
+    };
+    this.$http(API.getSupplierSkuList, params)
+      .then(({ data }) => {
+        if (data.code === "A0000") {
+          let skuList = data.list;
+          skuList.forEach(item => {
+            item.isChecked = false;
+          });
+          this.goodsListInsupplier = skuList;
+          this.page1.total = data.total;
+          if (data.total) {
+            this.step = 2;
+          } else {
+            this.$notify({
+              type: "warning",
+              message: "请添加商品"
+            });
+          }
+        } else {
+          this.$notify({
+            type: "warning",
+            message: data.msg
+          });
+        }
+      })
+      .catch(err => {
+        this.$notify({
+          type: "warning",
+          message: err.data.msg
+        });
+      });
+  }
+  // 全选
+  supplierGoodsSelectAll() {
+    let isSelectAll = true;
+    this.goodsListInsupplier.forEach((item, index) => {
+      item.isChecked = !item.isChecked;
+      if (!item.isChecked) {
+        isSelectAll = false;
+      }
+    });
+    this.supplierGoodsSelectAllStatus = isSelectAll;
+  }
+  // 添加商品
+  backStep2() {
+    this.step = 1;
+    this.goodsInfo = [];
+  }
+  // 删除当前
+  delCurrentGoodsInSupplier(item) {
+    let params = [
+      {
+        id: item.id,
+        supplierId: this.supplierId
+      }
+    ];
+    this.realDelGoodsInSupplier(params);
+  }
+  // 删除选中
+  delGoodsInSupplier() {
+    let params = [];
+    this.goodsListInsupplier.forEach((item, index) => {
+      params.push({
+        id: item.id,
+        supplierId: this.supplierId
+      });
+    });
+    this.realDelGoodsInSupplier(params);
+  }
+  // 删除请求
+  realDelGoodsInSupplier(params) {
+    this.$http(API.delSupplierGoods, params)
+      .then(({ data }) => {
+        if (data.code === "A0000") {
+          this.$notify({
+            type: "success",
+            message: "删除成功"
+          });
+          let len = params.length;
+          this.page1.total -= len;
+          for (let i = 0; i < len; i++) {
+            this.goodsListInsupplier.forEach((item, index) => {
+              if (item.id === params[i].id) {
+                this.goodsListInsupplier.splice(index, 1);
+              }
+            });
+          }
+          if (!this.goodsListInsupplier.length) {
+            this.getGoodsInSupplier(this.supplierId);
+          }
+        } else {
+          this.$notify({
+            type: "success",
+            message: "删除失败"
+          });
+        }
+      })
+      .catch(err => {
+        console.log("supplierCreate", err);
+      });
+  }
+  //更新价格
+  updateGoodsPriceInSupplier() {
+    let params = [];
+    this.goodsListInsupplier.forEach((item, index) => {
+      params.push({
+        id: item.id,
+        supplierId: this.supplierId,
+        agreePrice: item.agreePrice
+      });
+    });
+    this.updateGoodsPriceInSupplierByHttp(params);
+  }
+  updateGoodsPriceInSupplierByHttp(params) {
+    this.$http(API.updateSupplierGoods, params).then(({ data }) => {
+      this.$notify({
+        type: "success",
+        message: data.msg
+      });
+    });
+  }
+  // 去列表
+  goSupplierList() {
+    let params = [];
+    this.goodsListInsupplier.forEach((item, index) => {
+      params.push({
+        id: item.id,
+        supplierId: this.supplierId,
+        agreePrice: item.agreePrice
+      });
+    });
+    this.$router.push("/procurement/supplierList");
+    if (params.length) {
+      this.updateGoodsPriceInSupplierByHttp(params);
+    }
+  }
+}
+</script>
+<style lang="stylus" scoped>
+.create-getGoods__toList {
+  margin-top: 20px;
+  text-align: right;
+}
+</style>
+

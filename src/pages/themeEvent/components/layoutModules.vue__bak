@@ -1,0 +1,114 @@
+<template>
+  <div class="layout-modules">
+    <el-button type="primary" size="small" @mouseover="isExpanded=true" @click="isExpanded=!isExpanded">
+      <i class="iconfont" :class="{'icon-suoxiao':isExpanded,'icon-fangda':!isExpanded,}"></i>
+    </el-button>
+    <el-dialog v-model="isExpanded" title="选择模板">
+      <ul>
+        <li v-for="(img,key) in filterModuleImgs" :key="key">
+          <img :src="img" />
+          <div class="mask">
+            <el-button type="text" @click="selectedImg = img">查看</el-button>
+            <el-button type="text" @click="selectModule(key)" v-if="!disabled">加入视图</el-button>
+          </div>
+        </li>
+      </ul>
+    </el-dialog>
+    <div class="my-mask" v-if="dialogVisible" @click.self="selectedImg = null">
+      <img :src="selectedImg" />
+    </div>
+  </div>
+</template>
+<script lang="ts">
+import Vue from 'vue'
+import { Component, Prop, Watch } from 'vue-property-decorator'
+
+import { requireAll } from '../../../utils/'
+
+let moduleImgs = requireAll( ( <any> require ).context( '../modules/template', true, /\.png$/ ) )
+
+@Component( {
+  name: 'layout-modules'
+} )
+export default class LayoutModules extends Vue {
+  @Prop( { default: false } )
+  disabled: boolean
+  @Prop( { type: [ String, Number ] } )
+  themeEventMode
+  get dialogVisible () {
+    return !!this.selectedImg
+  }
+  moduleImgs = moduleImgs
+
+  get filterModuleImgs () {
+    // 旧模板 兼容
+    let filterList = [
+      'pc/bursting2_0_1',
+      'pc/timeLimitPrice2_0_1',
+      'pc/fullGifts2_0_4'
+    ]
+    console.log( Object.keys( moduleImgs ) )
+    return Object.keys( moduleImgs ).filter( v => filterList.indexOf( v ) < 0 ).reduce( ( prev, key ) => {
+      if ( key.indexOf( this.themeEventMode ? 'app' : 'pc' ) === 0 || key.indexOf( 'exchange' ) === 0 ) {
+        prev[ key ] = moduleImgs[ key ]
+      }
+      return prev
+    }, {} )
+  }
+
+
+  selectedImg = null
+  isExpanded: boolean = false
+  selectModule ( key ) {
+    this.$emit( 'add', key )
+    this.isExpanded = false
+  }
+}
+</script>
+<style lang="stylus" scoped>
+.my-mask
+  position fixed
+  left 0
+  right 0
+  top 0
+  bottom 0
+  background rgba(0,0,0,.3)
+  z-index 9999
+  img
+    position relative
+    left 50%
+    top 50%
+    transform translate(-50%,-50%)
+.layout-modules
+  padding 5px 10px 10px
+  .iconfont
+    font-size 18px
+ul
+  display flex
+  justify-content center
+  align-content center
+li
+  width 200px
+  border 1px solid #000
+  padding 3px
+  margin 10px
+  position relative
+  &:hover
+    .mask
+      opacity 1
+  .mask
+    position absolute
+    left 0
+    top 0
+    right 0
+    bottom 0
+    background rgba(0,0,0,.6)
+    text-align  center
+    transition  all .3s
+    opacity 0
+  +li
+    margin-top 10px
+  img
+    max-width 100%
+</style>
+
