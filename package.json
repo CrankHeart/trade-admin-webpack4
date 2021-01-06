@@ -23,7 +23,7 @@
     "integration": "cross-env NODE_ENV=integration node build/build.js"
   },
   "dependencies": {
-    "axios": "^0.17.1",
+    "axios": "^0.21.1",
     "crypto-js": "^3.1.9-1",
     "echarts": "^3.7.2",
     "element-ui": "^1.4.4",
